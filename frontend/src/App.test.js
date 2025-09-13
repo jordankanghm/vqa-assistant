@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
-import App from './App';
+import { render, screen } from "@testing-library/react";
+import App from "./App";
 
-test('renders learn react link', () => {
+test("renders app header", () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  // Replace with a query that exists in your current App UI
+  const headerElement = screen.getByText(/Visual Question Answering Assistant/i);
+  expect(headerElement).toBeInTheDocument();
 });
