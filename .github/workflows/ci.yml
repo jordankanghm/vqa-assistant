@@ -3,9 +3,11 @@ name: CI
 # When to run the workflow
 on:
   push:
-    branches: [main]          # run on commits to main branch
+    branches:
+      - '**'
   pull_request:
-    branches: [main]          # run on PRs targeting main branch
+    branches:
+      - '**'
 
 jobs:
   frontend-tests:
@@ -14,9 +16,9 @@ jobs:
       run:
         working-directory: ./frontend
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-node@v3
-      with:
-        node-version: 18
-    - run: npm install
-    - run: npm test -- --watchAll=false --ci
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - run: npm install
+      - run: npm test -- --watchAll=false --ci
