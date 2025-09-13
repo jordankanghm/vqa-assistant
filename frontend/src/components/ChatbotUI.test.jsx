@@ -1,13 +1,6 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ChatbotUI from "./ChatbotUI";
 
-// Mock scrollIntoView method on all HTMLElements before running tests
-// to prevent "scrollIntoView is not a function" errors in the Jest jsdom environment.
-// This allows tests involving scrollIntoView to run without errors.
-beforeAll(() => {
-  window.HTMLElement.prototype.scrollIntoView = jest.fn();
-});
-
 // Mocking global FileReader for image upload tests
 class MockFileReader {
   constructor() {
