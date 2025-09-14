@@ -59,7 +59,7 @@ export default function ChatbotUI() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!textInput.trim() && !pendingImage) return;
 
     const newMessage = {
@@ -74,16 +74,36 @@ export default function ChatbotUI() {
     setTextInput("");
     setPendingImage(null);
 
-    setTimeout(() => {
+    // Call API Gateway
+    try {
+      const res = await fetch("http://localhost:8000/inference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: newMessage.text,
+          image: newMessage.image,
+        }),
+      });
+      const reply = await res.json();
+
       const botMessage = {
         id: Date.now() + 1,
-        text: `Echo: ${newMessage.text || ""} ${newMessage.image ? "(image received)" : ""}`.trim(),
+        text: reply.answer,
+        image: reply.image,
+        isUser: false,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, botMessage]);
+    } catch (err) {
+      const botMessage = {
+        id: Date.now() + 1,
+        text: "Inference failed: " + err.message,
         image: null,
         isUser: false,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, botMessage]);
-    }, 1000);
+      setMessages(prev => [...prev, botMessage]);
+    }
   };
 
   const handleFileChange = (e) => {
