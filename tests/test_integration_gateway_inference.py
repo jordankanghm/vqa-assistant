@@ -8,7 +8,7 @@ GATEWAY_URL = "http://localhost:8000/inference"
 @pytest.fixture(scope="session", autouse=True)
 def wait_for_backend_ready():
     # Wait for backend services to be ready before running tests
-    for _ in range(30):  # wait up to 30 secs
+    for _ in range(60):  # wait up to 30 secs
         try:
             res1 = requests.get("http://localhost:8000/docs", timeout=2)
             res2 = requests.get("http://localhost:8001/docs", timeout=2)
