@@ -23,8 +23,8 @@ async def proxy_inference(request: Request):
         body = await request.json()
         response = await client.post(INFERENCE_SERVICE_URL, json=body)
         response.raise_for_status()
-        content = await response.json()
-        
+        content = response.json()
+
         return JSONResponse(status_code=response.status_code, content=content)
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=str(e))

@@ -14,6 +14,25 @@ class MockFileReader {
 }
 global.FileReader = MockFileReader;
 
+// Mocking global fetch
+beforeEach(() => {
+  global.fetch = jest.fn((url, options) => {
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        answer: "LangChain result for: " + (JSON.parse(options.body).text || ""),
+        image: JSON.parse(options.body).image || null
+      })
+    });
+  });
+});
+
+afterEach(() => {
+  global.fetch.mockClear();
+  delete global.fetch;
+});
+
 describe("ChatbotUI component", () => {
   test("renders initial UI with input and buttons", () => {
     render(<ChatbotUI />);
@@ -41,8 +60,8 @@ describe("ChatbotUI component", () => {
     // User message appears
     expect(screen.getByText("Hello")).toBeInTheDocument();
 
-    // Wait for bot echo to appear
-    await waitFor(() => expect(screen.getByText(/echo: hello/i)).toBeInTheDocument());
+    // Wait for API response
+    await waitFor(() => expect(screen.getByText(/langchain result for: hello/i)).toBeInTheDocument());
   });
 
   test("sending empty text does not add message", () => {
@@ -94,11 +113,11 @@ describe("ChatbotUI component", () => {
     expect(screen.getByText("Picture")).toBeInTheDocument();
     expect(screen.getByAltText("User upload")).toBeInTheDocument();
 
-    // Wait for bot echo
+    // Wait for API
     await waitFor(
         () => {
                 const matches = screen.queryAllByText(content =>
-                content.toLowerCase().includes("echo: picture")
+                content.toLowerCase().includes("langchain result for: picture")
                 );
                 expect(matches.length).toBeGreaterThan(0);
             },
