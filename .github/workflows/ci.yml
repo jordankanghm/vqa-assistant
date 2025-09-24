@@ -22,3 +22,86 @@ jobs:
           node-version: 18
       - run: npm install
       - run: npm test -- --watchAll=false --ci
+
+  backend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r backend/requirements.txt
+
+      - name: Start inference service
+        run: |
+          source venv/bin/activate
+          uvicorn backend.inference_service:app --port 8001 &
+          sleep 5
+
+      - name: Start gateway service
+        run: |
+          source venv/bin/activate
+          uvicorn backend.gateway:app --port 8000 &
+          sleep 5
+
+      - name: Run tests
+        run: |
+          source venv/bin/activate
+          python -m pytest tests/
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    needs: [backend-tests, frontend-tests]  # only run after unit tests pass
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python (for backend servers)
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Install backend dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r ../backend/requirements.txt
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install
+
+      - name: Start backend servers
+        run: |
+          source venv/bin/activate
+          cd ..
+          uvicorn backend.inference_service:app --port 8001 &
+          uvicorn backend.gateway:app --port 8000 &
+          sleep 10  # adjust if needed for servers to be ready
+
+      - name: Start frontend server
+        run: |
+          npm start &
+          sleep 10  # wait for frontend to be ready
+
+      - name: Run Playwright e2e tests
+        run: npx playwright test --config=./playwright.config.js --timeout=180000
