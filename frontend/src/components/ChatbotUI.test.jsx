@@ -17,13 +17,30 @@ global.FileReader = MockFileReader;
 // Mocking global fetch
 beforeEach(() => {
   global.fetch = jest.fn((url, options) => {
+    const body = JSON.parse(options.body);
+    // Extract last user message text from messages array for the mock response
+    let lastUserMessage = "";
+    if (body.messages && Array.isArray(body.messages)) {
+      // Find last message with role 'user'
+      const userMessages = body.messages.filter(msg => msg.role === "user");
+      if (userMessages.length > 0) {
+        const lastMsg = userMessages[userMessages.length - 1];
+        // Extract text content from multimodal content format
+        if (Array.isArray(lastMsg.content)) {
+          const textPart = lastMsg.content.find(c => c.type === "text");
+          lastUserMessage = textPart ? textPart.text : "";
+        } else if (lastMsg.content.type === "text") {
+          lastUserMessage = lastMsg.content.text;
+        }
+      }
+    }
+
     return Promise.resolve({
       ok: true,
       status: 200,
       json: async () => ({
-        answer: "LangChain result for: " + (JSON.parse(options.body).text || ""),
-        image: JSON.parse(options.body).image || null
-      })
+        answer: "LangChain result for: " + lastUserMessage,
+      }),
     });
   });
 });

@@ -17,6 +17,7 @@ const ChatMessage = ({ message, onImageClick }) => {
       // If message has image, clicking anywhere on the message triggers enlarged view
       onClick={() => message.image && onImageClick(message.image)}
       role="button"
+      className={message.isUser ? "user-message" : "bot-message"}
       tabIndex={message.image ? 0 : -1}
       onKeyDown={(e) => {
         if (message.image && (e.key === 'Enter' || e.key === ' ')) {
@@ -24,7 +25,11 @@ const ChatMessage = ({ message, onImageClick }) => {
         }
       }}
     >
-      {message.text && <div style={{ marginBottom: message.image ? 8 : 0 }}>{message.text}</div>}
+      {message.text && (
+        <div className="message-text" style={{ marginBottom: message.image ? 8 : 0 }}>
+          {message.text}
+        </div>
+      )}
       {message.image && (
         <img
           src={message.image}
@@ -62,10 +67,28 @@ export default function ChatbotUI() {
   const handleSendMessage = async () => {
     if (!textInput.trim() && !pendingImage) return;
 
+    let text = textInput.trim();
+    let imageUrl = null;
+
+    // Regex to find [Image Link: <url>] anywhere in the text
+    const imageLinkRegex = /\[Image Link:\s*(\S+)\]/i;
+    const match = text.match(imageLinkRegex);
+
+    if (match) {
+      const url = match[1];
+      // Only accept http or https schemes for image extraction
+      if (/^https?:\/\//i.test(url)) {
+        imageUrl = url;
+      }
+      // Remove the entire [Image Link: url] substring regardless of validity
+      text = text.replace(imageLinkRegex, "").trim();
+    }
+    
+    // Use this text and extracted imageUrl for your message content
     const newMessage = {
       id: Date.now(),
-      text: textInput.trim() || null,
-      image: pendingImage || null,
+      text: text || null,
+      image: imageUrl || pendingImage || null,
       isUser: true,
       timestamp: new Date(),
     };
@@ -74,14 +97,50 @@ export default function ChatbotUI() {
     setTextInput("");
     setPendingImage(null);
 
+    // Build chat history
+    const chatHistory = [];
+
+    messages.forEach(msg => {
+      if (msg.text || msg.image) {
+        const content = [];
+        if (msg.text) {
+          content.push({ type: "text", text: msg.text });
+        }
+        if (msg.image) {
+          if (msg.image.startsWith("http://") || msg.image.startsWith("https://")) {
+            content.push({ type: "image_url", image_url: { url: msg.image } });
+          } else {
+            content.push({ type: "image_base64", image_base64: { base64: msg.image } });
+          }
+        }
+        chatHistory.push({
+          role: msg.isUser ? "user" : "assistant",
+          content: content,
+        });
+      }
+    });
+
+    // Include the new user message as well since messages state update is async
+    if (newMessage.text || newMessage.image) {
+      const content = [];
+      if (newMessage.text) content.push({ type: "text", text: newMessage.text });
+      if (newMessage.image) content.push({ type: "image_url", image_url: { url: newMessage.image } });
+      chatHistory.push({
+        role: "user",
+        content: content,
+      });
+    }
+
+    console.log(JSON.stringify({
+          messages: chatHistory,
+        }))
     // Call API Gateway
     try {
       const res = await fetch("http://localhost:8000/inference", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: newMessage.text,
-          image: newMessage.image,
+          messages: chatHistory,
         }),
       });
       const reply = await res.json();
@@ -89,7 +148,6 @@ export default function ChatbotUI() {
       const botMessage = {
         id: Date.now() + 1,
         text: reply.answer,
-        image: reply.image,
         isUser: false,
         timestamp: new Date(),
       };
