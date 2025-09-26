@@ -1,27 +1,29 @@
 import pytest
-from backend.inference_service import app
+from backend.query_model_service import app
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, MagicMock
 
 client = TestClient(app)
 
-@patch("backend.inference_service.client.post", new_callable=AsyncMock)
-def test_gateway_with_valid_alternating(mock_post):
-    mock_response = AsyncMock()
-    mock_response.json = lambda: {"answer": "Valid conversation."}
-    mock_response.raise_for_status.return_value = None
-    mock_post.return_value = mock_response
-
+@patch("backend.query_model_service.client.chat.completions.create", new_callable=MagicMock)
+def test_query_model_with_valid_alternating(mock_create):
     valid_alternating_messages = [
         {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
         {"role": "assistant", "content": [{"type": "text", "text": "Hi, how can I help?"}]},
         {"role": "user", "content": [{"type": "text", "text": "Describe this image."}]}
     ]
+    
+    mock_choice = MagicMock()
+    mock_choice.message.content = "Valid conversation."
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_create.return_value = mock_response
 
-    response = client.post("/inference", json={"messages": valid_alternating_messages})
+    response = client.post("/query_model", json={"messages": valid_alternating_messages})
 
     assert response.status_code == 200
     assert response.json()["answer"] == "Valid conversation."
+
 
 @pytest.mark.parametrize("invalid_payload", [
     {"messages": [{"role": "user"}]},  # Missing content
@@ -30,7 +32,7 @@ def test_gateway_with_valid_alternating(mock_post):
     {"messages": [{"role": "user", "content": 42}]},  # content wrong type
     {"messages": "not a list"},  # messages wrong type
     {},  # messages missing
-    {"messages": []},  # empty list expects 422 explicitly from code
+    {"messages": []},  # empty list
     {"messages": ["not a dict"]},  # invalid message item type
     {"messages": [{"role": "user", "content": ["string_instead_of_dict"]}]},  # content list invalid items
 
@@ -49,6 +51,14 @@ def test_gateway_with_valid_alternating(mock_post):
         {"role": "assistant", "content": [{"type": "text", "text": "Hello"}]},
         {"role": "assistant", "content": [{"type": "text", "text": "This should fail"}]}
     ]},
+    {"messages": [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": "ftp://invalid-url.com/image.jpg"}}
+            ]
+        }
+    ]},
     # Invalid image url format
     {"messages": [
         {
@@ -59,8 +69,8 @@ def test_gateway_with_valid_alternating(mock_post):
         }
     ]},
 ])
-@patch("backend.inference_service.client.post", new_callable=MagicMock)
-def test_gateway_invalid_payloads(mock_post, invalid_payload):
-    mock_post.return_value = MagicMock(choices=[])
-    response = client.post("/inference", json=invalid_payload)
+@patch("backend.query_model_service.client.chat.completions.create", new_callable=MagicMock)
+def test_query_model_invalid_payloads(mock_create, invalid_payload):
+    mock_create.return_value = MagicMock(choices=[])
+    response = client.post("/query_model", json=invalid_payload)
     assert response.status_code == 422

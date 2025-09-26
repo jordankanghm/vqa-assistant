@@ -1,13 +1,20 @@
-import httpx
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, field_validator, model_validator, HttpUrl
-from typing import List, Union
+from pydantic import BaseModel, HttpUrl, model_validator, field_validator
+from typing import List, Union, Dict
+from openai import OpenAI
 
-QUERY_MODEL_SERVICE_URL = "http://localhost:8002/query_model"
+load_dotenv()  # Load environment variables
+
+api_key = os.getenv("OPENROUTER_API_KEY")
+
+client = OpenAI(
+  base_url="https://openrouter.ai/api/v1",
+  api_key=api_key,
+)
 
 app = FastAPI()
-
-client = httpx.AsyncClient(timeout=httpx.Timeout(30.0))
 
 class TextContent(BaseModel):
     type: str
@@ -44,7 +51,7 @@ class ChatMessage(BaseModel):
             raise ValueError("content must have at least one item")
         return model
 
-class InferenceRequest(BaseModel):
+class QueryRequest(BaseModel):
     messages: List[ChatMessage]
 
     @model_validator(mode="after")
@@ -64,19 +71,27 @@ class InferenceRequest(BaseModel):
         return model
 
 
-class InferenceResponse(BaseModel):
+class QueryResponse(BaseModel):
     answer: str
 
-@app.post("/inference", response_model=InferenceResponse)
-async def inference(req: InferenceRequest):
-    response = await client.post(QUERY_MODEL_SERVICE_URL, json=req.model_dump(mode="json"))
-    print(response.status_code)
-    print(response.json())
-    
-    response.raise_for_status()
-    resp_json = response.json()
-    answer = resp_json.get("answer", "")
+@app.post("/query_model", response_model=QueryResponse)
+async def query_model(req: QueryRequest):    
+    system_message = ChatMessage(
+        role="system",
+        content=[{"type": "text", "text": "You are a helpful assistant that answers questions about images."}]
+    )
 
-    return InferenceResponse(answer=answer)
+    # Prepend system message to the conversation
+    messages = [system_message.model_dump(mode="json")] + [m.model_dump(mode="json") for m in req.messages]
 
-# Run using uvicorn inference_service:app --reload --port 8001
+    # Pass full chat history to LLM
+    completion = client.chat.completions.create(
+        extra_body={},
+        model="x-ai/grok-4-fast:free",
+        messages=messages
+    )
+    answer = completion.choices[0].message.content
+
+    return QueryResponse(answer=answer)
+
+# Run using uvicorn query_model_service:app --reload --port 8002
