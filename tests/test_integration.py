@@ -29,7 +29,7 @@ def test_only_text_gateway(wait_for_backend_ready):
                 "role": "user", 
                 "content": [{
                     "type": "text",
-                    "text": "What is your name?"
+                    "text": "What is the capital of France?"
                 }]
             }
         ]
@@ -40,7 +40,7 @@ def test_only_text_gateway(wait_for_backend_ready):
     data = response.json()
     assert "answer" in data
     assert isinstance(data["answer"], str)
-    assert "grok" in data["answer"].lower()
+    assert "paris" in data["answer"].lower()
 
 def test_only_image_gateway(wait_for_backend_ready):
     img_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
@@ -136,7 +136,7 @@ def test_only_text_inference_service(wait_for_backend_ready):
             "role": "user",
             "content": [{
                 "type": "text",
-                "text": "What is your name?"
+                "text": "What is the capital of France?"
             }]
         }]
     }
@@ -145,7 +145,7 @@ def test_only_text_inference_service(wait_for_backend_ready):
     data = response.json()
     assert "answer" in data
     assert isinstance(data["answer"], str)
-    assert "grok" in data["answer"].lower()
+    assert "paris" in data["answer"].lower()
 
 def test_only_image_inference_service(wait_for_backend_ready):
     img_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
@@ -241,7 +241,7 @@ def test_only_text_query_model(wait_for_backend_ready):
             "role": "user",
             "content": [{
                 "type": "text",
-                "text": "What is your name?"
+                "text": "What is the capital of France?"
             }]
         }]
     }
@@ -250,7 +250,7 @@ def test_only_text_query_model(wait_for_backend_ready):
     data = response.json()
     assert "answer" in data
     assert isinstance(data["answer"], str)
-    assert "grok" in data["answer"].lower()
+    assert "paris" in data["answer"].lower()
 
 def test_only_image_query_model(wait_for_backend_ready):
     img_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"

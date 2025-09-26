@@ -7,14 +7,14 @@ test.describe('Valid input tests', () => {
   test('Send text message and receive bot reply', async ({ page }) => {
     await page.goto('http://localhost:3000');
     const textarea = page.locator('textarea[aria-label="Chat input text"]');
-    await textarea.fill('What is your name?');
+    await textarea.fill('What is the capital of France?');
     await textarea.press('Enter');
 
     const botMessages = page.locator('div.bot-message');
     const lastBotMessage = botMessages.last();
     const botReply = await lastBotMessage.locator('.message-text').textContent();
 
-    expect(botReply.toLowerCase()).toContain("grok");
+    expect(botReply.toLowerCase()).toContain("paris");
   });
 
 
