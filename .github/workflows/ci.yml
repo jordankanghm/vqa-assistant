@@ -26,7 +26,7 @@ jobs:
   backend-tests:
     runs-on: ubuntu-latest
     env:
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     defaults:
       run:
         working-directory: .
@@ -56,12 +56,6 @@ jobs:
           uvicorn backend.gateway:app --port 8000 &
           sleep 5
 
-      - name: Start query model service
-        run: |
-          source venv/bin/activate
-          uvicorn backend.query_model_service:app --port 8002 &
-          sleep 5
-
       - name: Run tests
         run: |
           source venv/bin/activate
@@ -70,7 +64,7 @@ jobs:
   e2e-tests:
     runs-on: ubuntu-latest
     env:
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     defaults:
       run:
         working-directory: ./frontend
@@ -106,7 +100,6 @@ jobs:
           cd ..
           uvicorn backend.inference_service:app --port 8001 &
           uvicorn backend.gateway:app --port 8000 &
-          uvicorn backend.query_model_service:app --port 8002 &
           sleep 10  # adjust if needed for servers to be ready
 
       - name: Start frontend server

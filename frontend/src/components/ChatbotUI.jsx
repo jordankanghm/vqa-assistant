@@ -1,6 +1,24 @@
 import React, { useState, useRef, useEffect } from "react";
 
 const ChatMessage = ({ message, onImageClick }) => {
+  // Extract text parts concatenated as text
+  const textParts = message.content
+    .filter(c => c.type === "text")
+    .map(c => c.text)
+    .join("\n");
+
+  // Find first image URL or base64 data for display
+  const imagePart = message.content.find(
+    c => c.type === "image_url" || c.type === "image_base64"
+  );
+
+  // Determine image source if present
+  const imageSrc = imagePart
+    ? imagePart.type === "image_url"
+      ? imagePart.image_url.url
+      : imagePart.image_base64.base64
+    : null;
+
   return (
     <div
       style={{
@@ -11,29 +29,27 @@ const ChatMessage = ({ message, onImageClick }) => {
         borderRadius: 12,
         padding: "8px 12px",
         wordBreak: "break-word",
-        cursor: message.image ? "pointer" : "default",
+        cursor: imageSrc ? "pointer" : "default",
       }}
-
-      // If message has image, clicking anywhere on the message triggers enlarged view
-      onClick={() => message.image && onImageClick(message.image)}
+      onClick={() => imageSrc && onImageClick(imageSrc)}
       role="button"
       className={message.isUser ? "user-message" : "bot-message"}
-      tabIndex={message.image ? 0 : -1}
+      tabIndex={imageSrc ? 0 : -1}
       onKeyDown={(e) => {
-        if (message.image && (e.key === 'Enter' || e.key === ' ')) {
-          onImageClick(message.image);
+        if (imageSrc && (e.key === "Enter" || e.key === " ")) {
+          onImageClick(imageSrc);
         }
       }}
     >
-      {message.text && (
-        <div className="message-text" style={{ marginBottom: message.image ? 8 : 0 }}>
-          {message.text}
+      {textParts && (
+        <div className="message-text" style={{ marginBottom: imageSrc ? 8 : 0 }}>
+          {textParts}
         </div>
       )}
-      {message.image && (
+      {imageSrc && (
         <img
-          src={message.image}
-          alt="User upload"
+          src={imageSrc}
+          alt="Message attachment"
           style={{ maxWidth: "100%", borderRadius: 8, pointerEvents: "none" }}
         />
       )}
@@ -64,72 +80,79 @@ export default function ChatbotUI() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"];
+
+  // Utility to find all valid image URLs in a text string
+  function extractImageUrls(text) {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = [];
+    let match;
+    while ((match = urlRegex.exec(text)) !== null) {
+      const url = match[1];
+      // Check if URL ends like an image extension (case insensitive)
+      if (imageExtensions.some(ext => url.toLowerCase().endsWith(ext))) {
+        urls.push(url);
+      }
+    }
+    return urls;
+  }
+
   const handleSendMessage = async () => {
     if (!textInput.trim() && !pendingImage) return;
 
     let text = textInput.trim();
-    let imageUrl = null;
+    // Extract all image URLs from the text and remove them from the text
+    const imageUrls = extractImageUrls(text);
+    imageUrls.forEach(url => {
+      // Remove URL text from message text
+      text = text.replace(url, "").trim();
+    });
 
-    // Regex to find [Image Link: <url>] anywhere in the text
-    const imageLinkRegex = /\[Image Link:\s*(\S+)\]/i;
-    const match = text.match(imageLinkRegex);
-
-    if (match) {
-      const url = match[1];
-      // Only accept http or https schemes for image extraction
-      if (/^https?:\/\//i.test(url)) {
-        imageUrl = url;
-      }
-      // Remove the entire [Image Link: url] substring regardless of validity
-      text = text.replace(imageLinkRegex, "").trim();
+    // Prepare message: text and images from URLs + any pending image upload
+    const images = [...imageUrls];
+    if (pendingImage) {
+      images.push(pendingImage);
     }
-    
-    // Use this text and extracted imageUrl for your message content
+
+    // Compose new message
+    const content = [];
+
+    if (text) {
+      content.push({ type: "text", text: text });
+    }
+
+    images.forEach(img => {
+      if (img.startsWith("http://") || img.startsWith("https://")) {
+        content.push({ type: "image_url", image_url: { url: img } });
+      } else if (img.startsWith("data:image/")) {
+        content.push({ type: "image_base64", image_base64: { base64: img } });
+      }
+    });
+
     const newMessage = {
       id: Date.now(),
-      text: text || null,
-      image: imageUrl || pendingImage || null,
+      content: content,
       isUser: true,
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, newMessage]);
+    // Append newMessage to messages
+    setMessages(prev => [...prev, newMessage]);
     setTextInput("");
     setPendingImage(null);
 
-    // Build chat history
+    // Build chat history for API request
     const chatHistory = [];
+    const combinedMessages = [...messages, newMessage];
 
-    messages.forEach(msg => {
-      if (msg.text || msg.image) {
-        const content = [];
-        if (msg.text) {
-          content.push({ type: "text", text: msg.text });
-        }
-        if (msg.image) {
-          if (msg.image.startsWith("http://") || msg.image.startsWith("https://")) {
-            content.push({ type: "image_url", image_url: { url: msg.image } });
-          } else {
-            content.push({ type: "image_base64", image_base64: { base64: msg.image } });
-          }
-        }
+    combinedMessages.forEach(msg => {
+      if (msg.content && msg.content.length > 0) {
         chatHistory.push({
           role: msg.isUser ? "user" : "assistant",
-          content: content,
+          content: msg.content,
         });
       }
     });
-
-    // Include the new user message as well since messages state update is async
-    if (newMessage.text || newMessage.image) {
-      const content = [];
-      if (newMessage.text) content.push({ type: "text", text: newMessage.text });
-      if (newMessage.image) content.push({ type: "image_url", image_url: { url: newMessage.image } });
-      chatHistory.push({
-        role: "user",
-        content: content,
-      });
-    }
 
     console.log(JSON.stringify({
           messages: chatHistory,
@@ -147,7 +170,7 @@ export default function ChatbotUI() {
 
       const botMessage = {
         id: Date.now() + 1,
-        text: reply.answer,
+        content: [{ type: "text", text: reply.answer }],
         isUser: false,
         timestamp: new Date(),
       };
@@ -155,7 +178,7 @@ export default function ChatbotUI() {
     } catch (err) {
       const botMessage = {
         id: Date.now() + 1,
-        text: "Inference failed: " + err.message,
+        content: [{ type: "text", text: "Inference failed: " + err.message }],
         image: null,
         isUser: false,
         timestamp: new Date(),
@@ -173,9 +196,43 @@ export default function ChatbotUI() {
     }
 
     const reader = new FileReader();
+
     reader.onload = (ev) => {
-      setPendingImage(ev.target.result);
+      const img = new Image();
+
+      // Downscale large images to max 512px width/height for cost-efficiency
+      img.onload = () => {
+        const maxDimension = 512; // max width or height
+        let { width, height } = img;
+
+        // Calculate new size preserving aspect ratio
+        if (width > height) {
+          if (width > maxDimension) {
+            height = (height * maxDimension) / width;
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width = (width * maxDimension) / height;
+            height = maxDimension;
+          }
+        }
+
+        // Create canvas to resize image
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Get base64 of resized image (JPEG format, 0.7 quality)
+        const resizedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+
+        setPendingImage(resizedBase64);
+      };
+      img.src = ev.target.result;
     };
+
     reader.readAsDataURL(file);
     e.target.value = null;
   };

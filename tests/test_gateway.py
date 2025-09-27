@@ -13,9 +13,9 @@ def test_gateway_with_valid_alternating(mock_post):
     mock_post.return_value = mock_response
 
     valid_alternating_messages = [
-        {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+        {"role": "user", "content": [{"type": "text", "text": "Hello"}, {"type": "image_url", "image_url": {"url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"}}]},
         {"role": "assistant", "content": [{"type": "text", "text": "Hi, how can I help?"}]},
-        {"role": "user", "content": [{"type": "text", "text": "Describe this image."}]}
+        {"role": "user", "content": [{"type": "text", "text": "Describe this image."}, {"type": "image_base64", "image_base64": {"base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="}}]}
     ]
 
     response = client.post("/inference", json={"messages": valid_alternating_messages})
@@ -55,6 +55,43 @@ def test_gateway_with_valid_alternating(mock_post):
             "role": "user",
             "content": [
                 {"type": "image_url", "image_url": {"url": "ftp://invalid-url.com/image.jpg"}}
+            ]
+        }
+    ]},
+    # Invalid base64 image formats for image_base64 type
+    # Missing data URI prefix
+    {"messages": [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_base64", "base64_str": "iVBORw0KGgoAAAANSUhEUgAAAAUA"}  # No data:image/ prefix
+            ]
+        }
+    ]},
+    # Invalid base64 data (malformed base64 string inside data URI)
+    {"messages": [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_base64", "base64_str": "data:image/png;base64,@@@INVALIDBASE64@@@"}
+            ]
+        }
+    ]},
+    # Missing comma separator between header and dataUri
+    {"messages": [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_base64", "base64_str": "data:image/png;base64INVALIDBASE64DATA"}
+            ]
+        }
+    ]},
+    # Header missing ';base64'
+    {"messages": [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image_base64", "base64_str": "data:image/png,INVALIDBASE64DATA"}
             ]
         }
     ]},

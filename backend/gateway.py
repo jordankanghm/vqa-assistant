@@ -1,8 +1,9 @@
-from fastapi import FastAPI, Request, HTTPException
+import base64
+import httpx
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator, model_validator, HttpUrl
 from typing import List, Union
-import httpx
 
 INFERENCE_SERVICE_URL = "http://localhost:8001/inference"
 
@@ -36,12 +37,45 @@ class ImageUrlContent(BaseModel):
     image_url: ImageUrlInner
 
     @field_validator("type")
-    def type_must_be_image_url(cls, v):
+    def must_be_image_url(cls, v):
         if v != "image_url":
             raise ValueError('type must be "image_url"')
         return v
 
-ContentItem = Union[TextContent, ImageUrlContent]
+class ImageBase64Inner(BaseModel):
+    base64: str
+    @field_validator("base64")
+    def must_be_valid_base64_image(cls, v):
+        if not v.startswith("data:image/"):
+            raise ValueError("base64_str must start with 'data:image/' prefix")
+        try:
+            # Separate metadata and base64 data parts
+            header, base64_data = v.split(",", 1)
+        except ValueError:
+            raise ValueError("base64_str must contain a comma separating header and data")
+
+        # Verify mime type part e.g., data:image/png;base64
+        if not header.endswith(";base64"):
+            raise ValueError("base64_str header must end with ';base64'")
+
+        # Validate base64 encoding correctness by decoding
+        try:
+            base64.b64decode(base64_data, validate=True)
+        except Exception:
+            raise ValueError("base64_str contains invalid base64 encoded data")
+        return v
+
+class ImageBase64Content(BaseModel):
+    type: str
+    image_base64: ImageBase64Inner
+
+    @field_validator("type")
+    def must_be_base64_image(cls, v):
+        if v != "image_base64":
+            raise ValueError('type must be "image_base64"')
+        return v
+
+ContentItem = Union[TextContent, ImageUrlContent, ImageBase64Content]
 
 class ChatMessage(BaseModel):
     role: str
@@ -71,7 +105,6 @@ class InferenceRequest(BaseModel):
             if i % 2 == 1 and m.role != "assistant":
                 raise ValueError(f"Message at position {i} should have role 'assistant'.")
         return model
-
 
 class InferenceResponse(BaseModel):
     answer: str
