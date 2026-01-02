@@ -1,9 +1,12 @@
+# Run in root directory using: pytest backend/integration/test_integration.py -v
+
 import pytest
 import requests
 import time
 
 GATEWAY_URL = "http://localhost:8000/inference"
 INFERENCE_URL = "http://localhost:8001/inference"
+DB_URL = "http://localhost:8002/search"
 
 @pytest.fixture(scope="session", autouse=True)
 def wait_for_backend_ready():
@@ -12,12 +15,16 @@ def wait_for_backend_ready():
         try:
             res_gateway = requests.get("http://localhost:8000/docs", timeout=10)
             res_inference = requests.get("http://localhost:8001/docs", timeout=10)
+            res_db = requests.get("http://localhost:8002/docs", timeout=10)
 
-            if res_gateway.ok and res_inference.ok:
+            if res_gateway.ok and res_inference.ok and res_db.ok:
                 return
+            
         except requests.exceptions.RequestException:
             pass
+
         time.sleep(1)
+
     pytest.fail("Backend services not ready")
 
 # Gateway tests
@@ -35,10 +42,7 @@ def test_only_text_gateway(wait_for_backend_ready):
     }
 
     response = requests.post(GATEWAY_URL, json=payload)
-    if response.status_code != 200:
-        print(f"Status: {response.status_code}, response body: {response.text}")
 
-    print(f"response: {response}")
     assert response.status_code == 200
     data = response.json()
     assert "answer" in data
@@ -60,7 +64,7 @@ def test_only_image_url_gateway(wait_for_backend_ready):
     }
 
     response = requests.post(GATEWAY_URL, json=payload)
-    print(f"response: {response}")
+
     assert response.status_code == 200
     data = response.json()
     assert "answer" in data
@@ -81,15 +85,11 @@ def test_only_image_base64_gateway(wait_for_backend_ready):
     }
 
     response = requests.post(GATEWAY_URL, json=payload)
-    if response.status_code != 200:
-        print(f"Status: {response.status_code}, response body: {response.text}")
 
-    print(f"response: {response}")
     assert response.status_code == 200
     data = response.json()
     assert "answer" in data
     assert isinstance(data["answer"], str)
-
 
 def test_text_and_image_gateway(wait_for_backend_ready):
     img_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
@@ -112,92 +112,12 @@ def test_text_and_image_gateway(wait_for_backend_ready):
     }
 
     response = requests.post(GATEWAY_URL, json=payload)
-    if response.status_code != 200:
-        print(f"Status: {response.status_code}, response body: {response.text}")
 
-    print(f"response: {response}")
     assert response.status_code == 200
     data = response.json()
     assert "answer" in data
     assert isinstance(data["answer"], str)
     assert "green" in data["answer"].lower()
-
-@pytest.mark.parametrize("invalid_payload", [
-    {"messages": [{"role": "user"}]},  # Missing content
-    {"messages": [{"content": [{"type": "text", "text": "Hello"}]}]},  # Missing role
-    {"messages": [{"role": 123, "content": [{"type": "text", "text": "Hello"}]}]},  # role not string
-    {"messages": [{"role": "user", "content": 42}]},  # content wrong type
-    {"messages": "not a list"},  # messages wrong type
-    {},  # messages missing
-    {"messages": []},  # empty list expects 422 explicitly from code
-    {"messages": ["not a dict"]},  # invalid message item type
-    {"messages": [{"role": "user", "content": ["string_instead_of_dict"]}]},  # content list invalid items
-
-    # System role not allowed
-    {"messages": [
-        {"role": "system", "content": [{"type": "text", "text": "Injected system message"}]},
-        {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
-    ]},
-
-    # Invalid alternating role sequences
-    {"messages": [
-        {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        {"role": "user", "content": [{"type": "text", "text": "This should fail"}]}
-    ]},
-    {"messages": [
-        {"role": "assistant", "content": [{"type": "text", "text": "Hello"}]},
-        {"role": "assistant", "content": [{"type": "text", "text": "This should fail"}]}
-    ]},
-    # Invalid image url format
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": "ftp://invalid-url.com/image.jpg"}}
-            ]
-        }
-    ]},
-    # Invalid base64 image formats for image_base64 type
-    # Missing data URI prefix
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_base64", "base64_str": "iVBORw0KGgoAAAANSUhEUgAAAAUA"}  # No data:image/ prefix
-            ]
-        }
-    ]},
-    # Invalid base64 data (malformed base64 string inside data URI)
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_base64", "base64_str": "data:image/png;base64,@@@INVALIDBASE64@@@"}
-            ]
-        }
-    ]},
-    # Missing comma separator between header and dataUri
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_base64", "base64_str": "data:image/png;base64INVALIDBASE64DATA"}
-            ]
-        }
-    ]},
-    # Header missing ';base64'
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_base64", "base64_str": "data:image/png,INVALIDBASE64DATA"}
-            ]
-        }
-    ]},
-])
-def test_gateway_invalid_payloads(invalid_payload):
-    response = requests.post(GATEWAY_URL, json=invalid_payload)
-    assert response.status_code == 422
 
 # Inference Service tests
 def test_only_text_inference_service(wait_for_backend_ready):
@@ -210,7 +130,9 @@ def test_only_text_inference_service(wait_for_backend_ready):
             }]
         }]
     }
+
     response = requests.post(INFERENCE_URL, json=payload)
+
     assert response.status_code == 200
     data = response.json()
     assert "answer" in data
@@ -232,6 +154,7 @@ def test_only_image_url_inference_service(wait_for_backend_ready):
     }
 
     response = requests.post(INFERENCE_URL, json=payload)
+
     assert response.status_code == 200
     data = response.json()
     assert "answer" in data
@@ -252,6 +175,7 @@ def test_only_image_base64_inference_service(wait_for_backend_ready):
     }
 
     response = requests.post(INFERENCE_URL, json=payload)
+
     assert response.status_code == 200
     data = response.json()
     assert "answer" in data
@@ -278,85 +202,37 @@ def test_text_and_image_inference_service(wait_for_backend_ready):
     }
 
     response = requests.post(INFERENCE_URL, json=payload)
+
     assert response.status_code == 200
     data = response.json()
     assert "answer" in data
     assert isinstance(data["answer"], str)
     assert "green" in data["answer"].lower()
 
-@pytest.mark.parametrize("invalid_payload", [
-    {"messages": [{"role": "user"}]},  # Missing content
-    {"messages": [{"content": [{"type": "text", "text": "Hello"}]}]},  # Missing role
-    {"messages": [{"role": 123, "content": [{"type": "text", "text": "Hello"}]}]},  # role not string
-    {"messages": [{"role": "user", "content": 42}]},  # content wrong type
-    {"messages": "not a list"},  # messages wrong type
-    {},  # messages missing
-    {"messages": []},  # empty list expects 422 explicitly from code
-    {"messages": ["not a dict"]},  # invalid message item type
-    {"messages": [{"role": "user", "content": ["string_instead_of_dict"]}]},  # content list invalid items
+# DB Service tests
+def test_db_returns_chunks(wait_for_backend_ready):
+    """Test DB service returns searchable chunks."""
+    payload = {"query": "machine learning", "top_k": 3, "min_similarity": 0.1}
+    response = requests.post(DB_URL, json=payload, timeout=10)
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert "chunks" in data
+    assert "count" in data
+    assert data["count"] >= 0
+    assert len(data["chunks"]) == data["count"]
+    
+    if data["count"] > 0:
+        assert all("similarity" in chunk and "text" in chunk for chunk in data["chunks"])
+        assert all(0.0 < chunk["similarity"] <= 1.0 for chunk in data["chunks"])
 
-    # System role not allowed
-    {"messages": [
-        {"role": "system", "content": [{"type": "text", "text": "Injected system message"}]},
-        {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
-    ]},
 
-    # Invalid alternating role sequences
-    {"messages": [
-        {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        {"role": "user", "content": [{"type": "text", "text": "This should fail"}]}
-    ]},
-    {"messages": [
-        {"role": "assistant", "content": [{"type": "text", "text": "Hello"}]},
-        {"role": "assistant", "content": [{"type": "text", "text": "This should fail"}]}
-    ]},
-    # Invalid image url format
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": "ftp://invalid-url.com/image.jpg"}}
-            ]
-        }
-    ]},
-    # Invalid base64 image formats for image_base64 type
-    # Missing data URI prefix
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_base64", "base64_str": "iVBORw0KGgoAAAANSUhEUgAAAAUA"}  # No data:image/ prefix
-            ]
-        }
-    ]},
-    # Invalid base64 data (malformed base64 string inside data URI)
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_base64", "base64_str": "data:image/png;base64,@@@INVALIDBASE64@@@"}
-            ]
-        }
-    ]},
-    # Missing comma separator between header and dataUri
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_base64", "base64_str": "data:image/png;base64INVALIDBASE64DATA"}
-            ]
-        }
-    ]},
-    # Header missing ';base64'
-    {"messages": [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image_base64", "base64_str": "data:image/png,INVALIDBASE64DATA"}
-            ]
-        }
-    ]},
-])
-def test_inference_service_invalid_payloads(invalid_payload):
-    response = requests.post(INFERENCE_URL, json=invalid_payload)
-    assert response.status_code == 422
+def test_db_min_similarity_filtering(wait_for_backend_ready):
+    """Test DB respects min_similarity threshold."""
+    payload_high = {"query": "machine learning", "top_k": 5, "min_similarity": 0.8}
+    payload_low = {"query": "machine learning", "top_k": 5, "min_similarity": 0.2}
+
+    resp_high = requests.post(DB_URL, json=payload_high, timeout=10).json()
+    resp_low = requests.post(DB_URL, json=payload_low, timeout=10).json()
+    
+    assert resp_high["count"] <= resp_low["count"]

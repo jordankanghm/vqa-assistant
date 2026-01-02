@@ -1,13 +1,24 @@
+# Run in root directory using: pytest backend/inference_service/tests/test_inference_service.py -v
 import pytest
-from backend.inference_service import app
+from backend.inference_service.main import app
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-client = TestClient(app)
+@pytest.fixture
+def mocked_test_client():
+    mock_client = AsyncMock()
+    with patch('backend.gateway.main.client', mock_client):
+        # Patch client when creating TestClient so that patched client can be captured at test client creation time
+        test_client = TestClient(app)  
+        yield test_client, mock_client
 
-@patch("backend.inference_service.llm", new_callable=MagicMock)
-def test_gateway_with_valid_alternating(mock_llm):
-    mock_llm.return_value.content = "Valid conversation."
+@patch("backend.inference_service.main.llm", new_callable=AsyncMock)
+def test_gateway_with_valid_alternating(mock_llm, mocked_test_client):
+    test_client, _ = mocked_test_client
+
+    mock_response = AsyncMock()
+    mock_response.content = "Valid conversation."
+    mock_llm.ainvoke.return_value = mock_response
 
     valid_alternating_messages = [
         {"role": "user", "content": [{"type": "text", "text": "Hello"}, {"type": "image_url", "image_url": {"url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"}}]},
@@ -15,7 +26,7 @@ def test_gateway_with_valid_alternating(mock_llm):
         {"role": "user", "content": [{"type": "text", "text": "Describe this image."}, {"type": "image_base64", "image_base64": {"base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="}}]}
     ]
 
-    response = client.post("/inference", json={"messages": valid_alternating_messages})
+    response = test_client.post("/inference", json={"messages": valid_alternating_messages})
 
     assert response.status_code == 200
     assert response.json()["answer"] == "Valid conversation."
@@ -93,8 +104,10 @@ def test_gateway_with_valid_alternating(mock_llm):
         }
     ]},
 ])
-@patch("backend.inference_service.client.post", new_callable=MagicMock)
-def test_gateway_invalid_payloads(mock_post, invalid_payload):
-    mock_post.return_value = MagicMock(choices=[])
-    response = client.post("/inference", json=invalid_payload)
+def test_gateway_invalid_payloads(mocked_test_client, invalid_payload):
+    test_client, mock_client = mocked_test_client
+
+    mock_client.post.return_value = MagicMock(choices=[])
+    response = test_client.post("/inference", json=invalid_payload)
+
     assert response.status_code == 422

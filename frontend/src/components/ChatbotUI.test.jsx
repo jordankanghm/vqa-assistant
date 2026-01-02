@@ -1,3 +1,4 @@
+// Run in frontend direcotry using: npm test
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ChatbotUI from "./ChatbotUI";
 
