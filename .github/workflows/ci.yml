@@ -36,6 +36,13 @@ jobs:
         with:
           python-version: 3.11
 
+      - name: Clean workspace
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h  # Check disk space
+
       - name: Install dependencies
         run: |
           python -m venv venv
@@ -70,6 +77,13 @@ jobs:
             semitechnologies/weaviate:1.25.0 \
             --persistence_data_path=/var/lib/weaviate
           sleep 10
+
+      - name: Clean workspace
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h  # Check disk space
 
       - name: Install dependencies
         run: |
