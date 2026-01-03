@@ -64,7 +64,7 @@ jobs:
         working-directory: .
     services:
       weaviate:
-        image: cr.weaviate.io/semitechnologies/weaviate:1.26.0  # Updated
+        image: cr.weaviate.io/semitechnologies/weaviate:1.26.0
         ports:
           - 8080:8080
           - 50051:50051
@@ -73,7 +73,7 @@ jobs:
           PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
           DEFAULT_VECTORIZER_MODULE: none
           ENABLE_MODULES: ''
-        options: >
+        options: >-
           --health-cmd "curl -f http://localhost:8080/v1/.well-known/ready"
           --health-interval 10s
           --health-timeout 5s
