@@ -175,10 +175,11 @@ jobs:
         run: |
           cd frontend
           npm install
+          cd ..
 
       - name: Install Playwright browsers
         run: |
-          cd ../e2e
+          cd e2e
           npx playwright install
           cd ..
 
