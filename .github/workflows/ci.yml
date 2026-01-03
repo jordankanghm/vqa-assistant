@@ -58,9 +58,26 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GITHUB_ACTIONS: true
     defaults:
       run:
         working-directory: .
+    services:
+      weaviate:
+        image: cr.weaviate.io/semitechnologies/weaviate:1.26.0  # Updated
+        ports:
+          - 8080:8080
+          - 50051:50051
+        env:
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: true
+          PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+          DEFAULT_VECTORIZER_MODULE: none
+          ENABLE_MODULES: ''
+        options: >
+          --health-cmd "curl -f http://localhost:8080/v1/.well-known/ready"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v3
 
@@ -68,13 +85,6 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-
-      - name: Start Weaviate (RAG dependency)
-        run: |
-          docker run -d -p 8081:8080 -p 50051:50051 \
-            semitechnologies/weaviate:1.25.0 \
-            --persistence_data_path=/var/lib/weaviate
-          sleep 10
 
       - name: Clean workspace
         run: |
@@ -89,22 +99,30 @@ jobs:
           source venv/bin/activate
           pip install -r backend/integration/requirements.txt
 
+      - name: Wait for Weaviate
+        run: |
+          until curl -f http://localhost:8080/v1/.well-known/ready; do
+            echo "Waiting for Weaviate..."
+            sleep 2
+          done
+          echo "Weaviate ready!"
+
       - name: Start gateway service
         run: |
           source venv/bin/activate
-          uvicorn backend.gateway.main:app --port 8000 &
+          uvicorn backend.gateway.main:app --host 0.0.0.0 --port 8000 &
           sleep 5
 
       - name: Start inference service
         run: |
           source venv/bin/activate
-          uvicorn backend.inference_service.main:app --port 8001 &
+          uvicorn backend.inference_service.main:app --host 0.0.0.0 --port 8001 &
           sleep 5
 
       - name: Start RAG service
         run: |
           source venv/bin/activate
-          uvicorn backend.db_service.main:app --port 8002 &
+          uvicorn backend.db_service.main:app --host 0.0.0.0 --port 8002 &
           sleep 5
 
       - name: Run tests

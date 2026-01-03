@@ -1,5 +1,6 @@
 # Run in current directory using: uvicorn main:app --reload --port 8002
 import heapq
+import os
 import re
 import weaviate
 import wikipediaapi
@@ -14,17 +15,21 @@ from weaviate.classes.config import Configure, DataType, Property, VectorDistanc
 
 client, model, wiki_wiki = None, None, None
 
+def get_weaviate_client():
+    """Get Weaviate client based on env."""
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        return weaviate.connect_to_local(host="localhost", port=8080, grpc_port=50051)
+    
+    else:
+        return weaviate.connect_to_local(host="127.0.0.1", port=8081, grpc_port=50051)
+        
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize client, model, and create collections."""
     global client, model, wiki_wiki
     
     # Connect to Weaviate
-    client = weaviate.connect_to_local(
-        host="127.0.0.1",
-        port=8081,
-        grpc_port=50051
-    )
+    client = get_weaviate_client()
 
     if not client.is_ready():
         raise RuntimeError("Weaviate not ready!")
