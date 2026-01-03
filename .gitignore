@@ -42,3 +42,5 @@ yarn-error.log*
 **/*.pyo
 **/*.pyd
 
+# e2e test results
+e2e/test-results/

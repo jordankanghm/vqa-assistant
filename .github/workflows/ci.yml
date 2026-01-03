@@ -177,10 +177,17 @@ jobs:
           npm install
           cd ..
 
+      - name: Install Playwright dependencies
+        run: |
+          cd e2e
+          npm init -y  # Create package.json if missing
+          npm install @playwright/test --save-dev
+          cd ..
+
       - name: Install Playwright browsers
         run: |
           cd e2e
-          npx playwright install
+          npx playwright install --with-deps
           cd ..
 
       - name: Wait for Weaviate
