@@ -134,6 +134,17 @@ jobs:
       run:
         working-directory: .
     needs: [backend-unit-tests, frontend-unit-tests, backend-integration-tests]  # only run after unit tests pass
+    services:
+      weaviate:
+        image: cr.weaviate.io/semitechnologies/weaviate:1.27.0
+        ports:
+          - 8080:8080
+          - 50051:50051
+        env:
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: true
+          PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+          DEFAULT_VECTORIZER_MODULE: none
+          ENABLE_MODULES: ''
     steps:
       - uses: actions/checkout@v3
 
@@ -142,12 +153,12 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Start Weaviate (RAG dependency)
+      - name: Clean workspace
         run: |
-          docker run -d -p 8081:8080 -p 50051:50051 \
-            semitechnologies/weaviate:1.25.0 \
-            --persistence_data_path=/var/lib/weaviate
-          sleep 10
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h  # Check disk space
 
       - name: Install backend dependencies
         run: |
@@ -171,18 +182,28 @@ jobs:
           npx playwright install
           cd ..
 
+      - name: Wait for Weaviate
+        run: |
+          until curl -f http://localhost:8080/v1/.well-known/ready; do
+            echo "Waiting for Weaviate..."
+            sleep 2
+          done
+          echo "Weaviate ready!"
+
       - name: Start backend servers
         run: |
-          uvicorn backend.gateway.main:app --port 8000 &
-          uvicorn backend.inference_service.main:app --port 8001 &
-          uvicorn backend.db_service.main:app --port 8002 &
+          source venv/bin/activate
+          uvicorn backend.gateway.main:app --host 0.0.0.0 --port 8000 &
+          uvicorn backend.inference_service.main:app --host 0.0.0.0 --port 8001 &
+          uvicorn backend.db_service.main:app --host 0.0.0.0 --port 8002 &
           sleep 10  # adjust if needed for servers to be ready
 
       - name: Start frontend server
         run: |
           cd frontend
-          npm start &
+          npm run dev -- --host 0.0.0.0 --port 3000 &
           sleep 10  # wait for frontend to be ready
+          curl -f http://localhost:3000 || exit 1
           cd ..
 
       - name: Run Playwright e2e tests
