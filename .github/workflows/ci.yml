@@ -62,6 +62,7 @@ jobs:
     defaults:
       run:
         working-directory: .
+    needs: [backend-unit-tests]
     services:
       weaviate:
         image: cr.weaviate.io/semitechnologies/weaviate:1.26.0
@@ -73,11 +74,14 @@ jobs:
           PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
           DEFAULT_VECTORIZER_MODULE: none
           ENABLE_MODULES: ''
+          CLUSTER_HOSTNAME: 'node1'
+          RAFT_ENABLE_ONE_NODE_RECOVERY: 'false'
         options: >-
           --health-cmd "curl -f http://localhost:8080/v1/.well-known/ready"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 10
+          --health-retries 20
+          --health-start-period 30s
     steps:
       - uses: actions/checkout@v3
 
@@ -137,7 +141,7 @@ jobs:
     defaults:
       run:
         working-directory: .
-    needs: [backend-unit-tests, frontend-unit-tests]  # only run after unit tests pass
+    needs: [backend-unit-tests, frontend-unit-tests, backend-integration-tests]  # only run after unit tests pass
     steps:
       - uses: actions/checkout@v3
 
