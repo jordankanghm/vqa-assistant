@@ -74,15 +74,6 @@ jobs:
           PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
           DEFAULT_VECTORIZER_MODULE: none
           ENABLE_MODULES: ''
-          CLUSTER_HOSTNAME: 'node1'
-          RAFT_ENABLE_ONE_NODE_RECOVERY: 'false'
-          RAFT_BOOTSTRAP_EXPECT: '1'
-        options: >-
-          --health-cmd "curl -f http://localhost:8080/v1/.well-known/live || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 20
-          --health-start-period 45s
     steps:
       - uses: actions/checkout@v3
 
