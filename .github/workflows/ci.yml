@@ -10,7 +10,7 @@ on:
       - '**'
 
 jobs:
-  frontend-tests:
+  frontend-unit-tests:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,10 +23,8 @@ jobs:
       - run: npm install
       - run: npm test -- --watchAll=false --ci
 
-  backend-tests:
+  backend-unit-tests:
     runs-on: ubuntu-latest
-    env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     defaults:
       run:
         working-directory: .
@@ -38,28 +36,95 @@ jobs:
         with:
           python-version: 3.11
 
+      - name: Clean workspace
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h  # Check disk space
+
       - name: Install dependencies
         run: |
           python -m venv venv
           source venv/bin/activate
-          pip install -r backend/requirements.txt
+          pip install -r backend/integration/requirements.txt
 
-      - name: Start inference service
+      - name: Run tests
         run: |
           source venv/bin/activate
-          uvicorn backend.inference_service:app --port 8001 &
-          sleep 5
+          python -m pytest backend/*/tests/
+
+  backend-integration-tests:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GITHUB_ACTIONS: true
+    defaults:
+      run:
+        working-directory: .
+    needs: [backend-unit-tests]
+    services:
+      weaviate:
+        image: cr.weaviate.io/semitechnologies/weaviate:1.27.0
+        ports:
+          - 8080:8080
+          - 50051:50051
+        env:
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: true
+          PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+          DEFAULT_VECTORIZER_MODULE: none
+          ENABLE_MODULES: ''
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - name: Clean workspace
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h  # Check disk space
+
+      - name: Install dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r backend/integration/requirements.txt
+
+      - name: Wait for Weaviate
+        run: |
+          until curl -f http://localhost:8080/v1/.well-known/ready; do
+            echo "Waiting for Weaviate..."
+            sleep 2
+          done
+          echo "Weaviate ready!"
 
       - name: Start gateway service
         run: |
           source venv/bin/activate
-          uvicorn backend.gateway:app --port 8000 &
+          uvicorn backend.gateway.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+
+      - name: Start inference service
+        run: |
+          source venv/bin/activate
+          uvicorn backend.inference_service.main:app --host 0.0.0.0 --port 8001 &
+          sleep 5
+
+      - name: Start RAG service
+        run: |
+          source venv/bin/activate
+          uvicorn backend.db_service.main:app --host 0.0.0.0 --port 8002 &
           sleep 5
 
       - name: Run tests
         run: |
           source venv/bin/activate
-          python -m pytest tests/
+          python -m pytest backend/integration/test_integration.py
 
   e2e-tests:
     runs-on: ubuntu-latest
@@ -67,8 +132,19 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     defaults:
       run:
-        working-directory: ./frontend
-    needs: [backend-tests, frontend-tests]  # only run after unit tests pass
+        working-directory: .
+    needs: [backend-unit-tests, frontend-unit-tests, backend-integration-tests]  # only run after unit tests pass
+    services:
+      weaviate:
+        image: cr.weaviate.io/semitechnologies/weaviate:1.27.0
+        ports:
+          - 8080:8080
+          - 50051:50051
+        env:
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: true
+          PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+          DEFAULT_VECTORIZER_MODULE: none
+          ENABLE_MODULES: ''
     steps:
       - uses: actions/checkout@v3
 
@@ -77,11 +153,18 @@ jobs:
         with:
           python-version: 3.11
 
+      - name: Clean workspace
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          df -h  # Check disk space
+
       - name: Install backend dependencies
         run: |
           python -m venv venv
           source venv/bin/activate
-          pip install -r ../backend/requirements.txt
+          pip install -r backend/integration/requirements.txt
 
       - name: Install Node.js
         uses: actions/setup-node@v3
@@ -89,23 +172,49 @@ jobs:
           node-version: 18
 
       - name: Install frontend dependencies
-        run: npm install
+        run: |
+          cd frontend
+          npm install
+          cd ..
+
+      - name: Install Playwright dependencies
+        run: |
+          cd e2e
+          npm init -y  # Create package.json if missing
+          npm install @playwright/test --save-dev
+          cd ..
 
       - name: Install Playwright browsers
-        run: npx playwright install
+        run: |
+          cd e2e
+          npx playwright install --with-deps
+          cd ..
+
+      - name: Wait for Weaviate
+        run: |
+          until curl -f http://localhost:8080/v1/.well-known/ready; do
+            echo "Waiting for Weaviate..."
+            sleep 2
+          done
+          echo "Weaviate ready!"
 
       - name: Start backend servers
         run: |
           source venv/bin/activate
-          cd ..
-          uvicorn backend.inference_service:app --port 8001 &
-          uvicorn backend.gateway:app --port 8000 &
+          uvicorn backend.gateway.main:app --host 0.0.0.0 --port 8000 &
+          uvicorn backend.inference_service.main:app --host 0.0.0.0 --port 8001 &
+          uvicorn backend.db_service.main:app --host 0.0.0.0 --port 8002 &
           sleep 10  # adjust if needed for servers to be ready
 
       - name: Start frontend server
         run: |
+          cd frontend
           npm start &
           sleep 10  # wait for frontend to be ready
+          curl -f http://localhost:3000 || exit 1
+          cd ..
 
       - name: Run Playwright e2e tests
-        run: npx playwright test --config=./playwright.config.js --timeout=180000
+        run: |
+          cd e2e
+          npx playwright test --config=./playwright.config.js --timeout=180000
