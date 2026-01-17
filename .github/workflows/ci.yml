@@ -137,6 +137,24 @@ jobs:
           uvicorn backend.user_service.main:app --host 0.0.0.0 --port 8003 &
           sleep 5
 
+      - name: Health check all services
+        run: |
+          timeout=60
+          for i in $(seq 1 $timeout); do
+            if curl -f -m 5 http://localhost:8000/healthz 2>/dev/null &&
+              curl -f -m 5 http://localhost:8003/health 2>/dev/null &&
+              curl -f -m 5 http://localhost:8001/health 2>/dev/null &&
+              curl -f http://localhost:8080/v1/.well-known/ready 2>/dev/null &&
+              PGPASSWORD=password pg_isready -h localhost -p 5432 -U postgres; then
+              echo "✅ All healthy!"
+              exit 0
+            fi
+            echo "⏳ Waiting ($i/$timeout)"
+            sleep 2
+          done
+          echo "❌ Timeout"
+          exit 1
+          
       - name: Run tests
         run: |
           source venv/bin/activate
