@@ -228,7 +228,6 @@ def ingest_wikipedia_articles(categories):
 
 # Retrieves the most relevant summary based on the query, then retrieves the top_k chunks from that summary most similar to the query.
 def vector_search(query, top_k=3, min_similarity=0.5):
-    print(f"client: {client}")
     summaries_collection = client.collections.use("Summary")
     chunks_collection = client.collections.use("Chunk")
 

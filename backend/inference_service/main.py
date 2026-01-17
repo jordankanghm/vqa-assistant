@@ -1,15 +1,23 @@
 # Run using uvicorn main:app --reload --port 8001
 import base64
 import httpx
+import json
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, field_validator, HttpUrl, model_validator
 from typing import List, Union
 
 client, llm = None, None
+security = HTTPBearer()
+
+load_dotenv()
+SECRET_KEY = os.environ.get("AUTH_SECRET_KEY")
+ALGORITHM = os.environ.get("AUTH_ALGORITHM")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,7 +39,8 @@ system_msg = "You are a helpful visual question answering assistant."
 
 app = FastAPI(lifespan=lifespan)
 
-DB_SERVICE_URL = "http://localhost:8002"
+RAG_SERVICE_URL = "http://localhost:8002"
+USER_SERVICE_URL = "http://localhost:8003"
 
 class TextContent(BaseModel):
     type: str
@@ -108,7 +117,7 @@ class ChatMessage(BaseModel):
         
         return model
 
-class InferenceRequest(BaseModel):
+class UnauthInferenceRequest(BaseModel):
     messages: List[ChatMessage]
 
     @model_validator(mode="after")
@@ -131,6 +140,18 @@ class InferenceRequest(BaseModel):
             
         return model
 
+class AuthInferenceRequest(BaseModel):
+    user_query: ChatMessage
+    user_id: int
+    chat_id: int
+
+    @model_validator(mode="after")
+    def validate_user_query(cls, model):
+        if model.user_query.role != "user":
+            raise ValueError("user_query must have role 'user'")
+        
+        return model
+    
 class InferenceResponse(BaseModel):
     answer: str
 
@@ -162,22 +183,14 @@ def convert_messages_to_langchain(messages: List[ChatMessage]):
 
     return lc_messages
 
-@app.post("/inference", response_model=InferenceResponse)
-async def inference(req: InferenceRequest):
-    # Extract user query from latest message
-    user_query = ""
-    for content in req.messages[-1].content:
-        if content.type == "text":
-            user_query += content.text
-
-    # HTTP CALL to RAG service
+async def rag(user_text, messages):
     rag_context = "No relevant context found."
 
-    if user_query:  # No RAG for image-only queries
+    if user_text:  # No RAG for image-only queries
         try:
             rag_response = await client.post(
-                f"{DB_SERVICE_URL}/search",
-                json={"query": user_query, "top_k": 3, "min_similarity": 0.5}
+                f"{RAG_SERVICE_URL}/search",
+                json={"query": user_text, "top_k": 3, "min_similarity": 0.5}
             )
             rag_response.raise_for_status()
             data = rag_response.json()
@@ -189,9 +202,96 @@ async def inference(req: InferenceRequest):
             print(f"RAG service error: {e}")
     
     # LLM with RAG context
-    lc_msgs = convert_messages_to_langchain(req.messages)
+    lc_msgs = convert_messages_to_langchain(messages)
     rag_prompt = system_msg + f"Use this context: {rag_context}\n\n"
     conversation = [SystemMessage(content=rag_prompt)] + lc_msgs
     response = await llm.ainvoke(conversation)
     
+    return response
+
+@app.post("/unauth-inference", response_model=InferenceResponse)
+async def unauth_inference(req: UnauthInferenceRequest):
+    # Extract user query from latest message
+    user_query = ""
+    for content in req.messages[-1].content:
+        if content.type == "text":
+            user_query += content.text
+
+    try:
+        response = await rag(user_query, req.messages)
+
+    except Exception as e:
+            print(f"RAG service error: {e}")
+    
+    return InferenceResponse(answer=response.content)
+
+@app.post("/auth-inference", response_model=InferenceResponse)
+async def auth_inference(
+    req: AuthInferenceRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+    ):
+    messages = [req.user_query]
+
+    headers = {
+        "Authorization": f"Bearer {credentials.credentials}"
+    }
+    
+    history_response = await client.get(
+        f"{USER_SERVICE_URL}/chat/{req.user_id}/{req.chat_id}", 
+        headers=headers
+    )
+
+    history_response.raise_for_status()
+    history_data = history_response.json()
+    history_messages = history_data.get("messages", [])
+
+    normalized_history = []
+
+    for msg_dict in history_messages:
+        normalized_history.append(ChatMessage.model_validate(msg_dict.copy()))
+        
+    messages = normalized_history + [req.user_query]
+
+    # Save user query
+    try:
+        user_response = await client.post(
+            f"{USER_SERVICE_URL}/chat/{req.user_id}/{req.chat_id}/messages",
+            headers=headers,
+            json=req.user_query.model_dump()
+        )
+        user_response.raise_for_status()
+
+    except Exception as e:
+        print(f"Failed to save user message: {e}")
+
+    # Extract user query from latest message
+    user_text = ""
+    for content in req.user_query.content:
+        if content.type == "text":
+            user_text += content.text
+    
+    response = None
+    
+    try:
+        response = await rag(user_text, messages)
+    except Exception as e:
+            print(f"RAG service error: {e}")
+
+    # Save chatbot response
+    assistant_msg = ChatMessage(
+        role="assistant",
+        content=[TextContent(type="text", text=response.content)]
+    )
+
+    try:
+        assistant_response = await client.post(
+            f"{USER_SERVICE_URL}/chat/{req.user_id}/{req.chat_id}/messages",
+            headers=headers,
+            json=assistant_msg.model_dump()
+        )
+        assistant_response.raise_for_status()
+
+    except Exception as e:
+        print(f"Failed to save assistant message: {e}")
+
     return InferenceResponse(answer=response.content)

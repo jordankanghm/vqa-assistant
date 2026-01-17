@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 
+const GATEWAY_URL = "http://localhost:8000"
+
 const ChatMessage = ({ message, onImageClick }) => {
   // Extract text parts concatenated as text
   const textParts = message.content
@@ -75,6 +77,17 @@ export default function ChatbotUI() {
   const [lightboxImage, setLightboxImage] = useState(null);
   const fileInputRef = useRef(null);
   const chatEndRef = useRef(null);
+
+  // auth state
+  const [user, setUsername] = useState(null); // Current logged-in username, e.g. { username: "testuser" }
+  const [userId, setUserId] = useState(null);  // Current logged-in userId, e.g. 42
+  const [currentChatId, setCurrentChatId] = useState(null);  // Current chatId, e.g. 1 (Welcome Chat)
+  const [chats, setChats] = useState([]);  // Current chats, e.g. [{id: 1, title: "Welcome Chat"}, ...]
+  const [token, setToken] = useState(null); // JWT access token for API calls, e.g. "eyJhb..."
+  const [authOpen, setAuthOpen] = useState(false); // Auth modal visible? e.g. True
+  const [authMode, setAuthMode] = useState("login"); // Login form or register form? e.g. "login" | "register"
+  const [authForm, setAuthForm] = useState({ username: "", email: "", password: "" }); // Form input values, e.g. {username: "test", email: "test@test.com", password: "123"}
+  const [authError, setAuthError] = useState(""); // Last auth error message, e.g. "Username already registered"
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -154,20 +167,48 @@ export default function ChatbotUI() {
       }
     });
 
-    console.log(JSON.stringify({
-          messages: chatHistory,
-        }))
     // Call API Gateway
+    const lastUserContent = content;
+    const lastUserMessage = {
+      role: "user",
+      content: lastUserContent
+    };
     try {
-      const res = await fetch("http://localhost:8000/inference", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: chatHistory,
-        }),
-      });
+      let res;
+  
+      if (!token) {
+        // UNAUTH: send full chat history  
+        res = await fetch(`${GATEWAY_URL}/unauth-inference`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: chatHistory }),
+        });
+        
+      } else if (userId && currentChatId) {
+        // AUTH: send only latest user message + IDs
+        res = await fetch(`${GATEWAY_URL}/auth-inference`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            user_query: lastUserMessage,
+            user_id: userId,
+            chat_id: currentChatId,
+          }),
+        });
+        
+      } else {
+        throw new Error("Missing userId or currentChatId for authenticated inference");
+      }
+      
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.detail || `Inference failed: ${res.status}`);
+      }
+      
       const reply = await res.json();
-
       const botMessage = {
         id: Date.now() + 1,
         content: [{ type: "text", text: reply.answer }],
@@ -252,6 +293,197 @@ export default function ChatbotUI() {
     setLightboxImage(null);
   };
 
+  // ---------- Auth handlers ----------
+
+  const openAuth = (mode) => {
+    setAuthMode(mode);
+    setAuthForm({ username: "", email: "", password: "" });
+    setAuthError("");
+    setAuthOpen(true);
+  };
+
+  const closeAuth = () => {
+    setAuthOpen(false);
+    setAuthError("");
+  };
+
+  const handleAuthChange = (e) => {
+    const { name, value } = e.target;
+    setAuthForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setAuthError("");
+    try {
+      const resp = await fetch(`${GATEWAY_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: authForm.username,
+          email: authForm.email,
+          password: authForm.password,
+        }),
+      });
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}));
+        throw new Error(errBody.detail || "Registration failed");
+      }
+
+      const res = await fetch(`${GATEWAY_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: authForm.username,
+          password: authForm.password,
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.detail || "Login failed");
+      }
+      // Registration success: auto-login optional; here just close modal
+      const data = await res.json();
+      setToken(data.access_token)
+      setUsername({ username: authForm.username });
+      setUserId(data.user_id);
+      closeAuth();
+
+      // Auto-load user's chats
+      await loadUserChats(data.user_id, data.access_token);
+    } catch (err) {
+      setAuthError(err.message);
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError("");
+    try {
+      const res = await fetch(`${GATEWAY_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: authForm.username,
+          password: authForm.password,
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.detail || "Login failed");
+      }
+      const data = await res.json();
+      setToken(data.access_token);
+      setUsername({ username: authForm.username });
+      setUserId(data.user_id)
+      closeAuth();
+
+      // Auto-load user's chats
+      await loadUserChats(data.user_id, data.access_token);
+    } catch (err) {
+      setAuthError(err.message);
+    }
+  };
+
+  const handleLogout = () => {
+    setUsername(null);
+    setToken(null);
+  };
+
+  const loadUserChats = async (userId, token) => {
+    try {
+      const res = await fetch(`${GATEWAY_URL}/chats/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        console.error("Failed to load chats:", await res.text());
+        setChats([]);  // Reset to empty array on error
+        return;
+      }
+      const data = await res.json();
+      const chatsList = data.chats;
+      setChats(data.chats);
+
+      const defaultChatId = chatsList[0].id;
+      setCurrentChatId(defaultChatId);
+      
+    } catch (err) {
+      console.error("loadUserChats error:", err);
+    }
+  };
+
+  const chatSelectOnChange = async (e) => {
+    const chatId = Number(e.target.value);
+    if (!chatId) return;
+    
+    if (!userId || !token) {
+      console.error('❌ Auth missing at chat select');
+      return;
+    }
+    
+    setCurrentChatId(chatId);
+    await loadChatMessages(chatId);
+  };
+
+  const createNewChat = async () => {
+    if (!userId || !token) return;
+    
+    try {
+      const res = await fetch(`${GATEWAY_URL}/chats/${userId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        }
+      });
+      
+      if (!res.ok) {
+        console.error("Failed to create chat:", await res.text());
+        return;
+      }
+      
+      const newChat = await res.json();
+      setChats(prev => [...prev, newChat]);
+      setCurrentChatId(newChat.id);
+      setMessages([]); // Clear messages for new chat
+    } catch (err) {
+      console.error("createNewChat error:", err);
+    }
+  };
+
+  const loadChatMessages = async (chatId) => {
+    if (!userId || !token) {
+      console.error("❌ Missing auth for loadChatMessages", { userId: !!userId, token: !!token });
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${GATEWAY_URL}/chat/${userId}/${chatId}`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      
+      
+      if (!res.ok) {
+        console.error("Messages failed:", res.status, await res.text());
+        return;
+      }
+      
+      const data = await res.json();
+      const messages = data.messages;
+      
+      const frontendMessages = messages.map(msg => ({
+        id: msg.id || Date.now() + Math.random(),
+        content: msg.content || [{ type: "text", text: msg.text || msg.content || "No content" }],
+        isUser: msg.role === "user",
+        timestamp: new Date(msg.created_at || msg.timestamp || Date.now()),
+      }));
+      
+      setMessages(frontendMessages);
+    } catch (err) {
+      console.error("loadChatMessages error:", err);
+    }
+  };
+
   return (
     <div
       style={{
@@ -276,7 +508,94 @@ export default function ChatbotUI() {
           textAlign: "center",
         }}
       >
-        Visual Question Answering Assistant
+        <span>Visual Question Answering Assistant</span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {user ? (
+            <>
+              <span style={{ fontSize: 12 }}>Logged in as {user.username}</span>
+              <button
+                onClick={handleLogout}
+                style={{
+                  backgroundColor: "transparent",
+                  border: "1px solid #fff",
+                  color: "#fff",
+                  borderRadius: 16,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                data-testid="header-login"
+                onClick={() => openAuth("login")}
+                style={{
+                  backgroundColor: "transparent",
+                  border: "1px solid #fff",
+                  color: "#fff",
+                  borderRadius: 16,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Log in
+              </button>
+              <button
+                data-testid="header-signup"
+                onClick={() => openAuth("register")}
+                style={{
+                  backgroundColor: "#28a745",
+                  border: "none",
+                  color: "#fff",
+                  borderRadius: 16,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                Sign up
+              </button>
+            </>
+          )}
+          {user && (
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <button
+                onClick={createNewChat}
+                style={{
+                  backgroundColor: "#28a745",
+                  border: "none",
+                  color: "white",
+                  borderRadius: 16,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+                disabled={!token}
+              >
+                + New Chat
+              </button>
+              {chats.length > 0 && (
+                <select 
+                  value={currentChatId || ''} 
+                  onChange={chatSelectOnChange}
+                  style={{ padding: '4px 8px', fontSize: 12 }}
+                >
+                  <option value="">Select chat...</option>
+                  {chats.map(chat => (
+                    <option key={chat.id} value={chat.id}>
+                      {chat.title || `Chat ${chat.id}`}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+        </div>
       </header>
 
       <main
@@ -447,6 +766,108 @@ export default function ChatbotUI() {
           >
             &times;
           </button>
+        </div>
+      )}
+
+      {authOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10000,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#fff",
+              padding: 20,
+              borderRadius: 8,
+              minWidth: 280,
+              maxWidth: 360,
+              boxShadow: "0 0 12px rgba(0,0,0,0.3)",
+            }}
+          >
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>
+              {authMode === "login" ? "Log in" : "Sign up"}
+            </h3>
+            <form onSubmit={authMode === "login" ? handleLogin : handleRegister}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input
+                  name="username"
+                  value={authForm.username}
+                  onChange={handleAuthChange}
+                  placeholder="Username"
+                  required
+                  style={{ padding: 6, fontSize: 14 }}
+                />
+                {authMode === "register" && (
+                  <input
+                    name="email"
+                    type="email"
+                    value={authForm.email}
+                    onChange={handleAuthChange}
+                    placeholder="Email"
+                    required
+                    style={{ padding: 6, fontSize: 14 }}
+                  />
+                )}
+                <input
+                  name="password"
+                  type="password"
+                  value={authForm.password}
+                  onChange={handleAuthChange}
+                  placeholder="Password"
+                  required
+                  style={{ padding: 6, fontSize: 14 }}
+                />
+              </div>
+              {authError && (
+                <div style={{ color: "red", marginTop: 8, fontSize: 12 }}>
+                  {authError}
+                </div>
+              )}
+              <div
+                style={{
+                  marginTop: 12,
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={closeAuth}
+                  style={{
+                    border: "1px solid #ccc",
+                    backgroundColor: "transparent",
+                    borderRadius: 4,
+                    padding: "4px 10px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  data-testid="modal-submit"
+                  type="submit"
+                  style={{
+                    backgroundColor: "#007bff",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 4,
+                    padding: "4px 12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {authMode === "login" ? "Log in" : "Sign up"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

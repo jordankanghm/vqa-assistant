@@ -1,13 +1,22 @@
 # Run using uvicorn main:app --reload --port 8000
 import base64
 import httpx
+import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, field_validator, HttpUrl, model_validator
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, EmailStr, Field, field_validator, HttpUrl, model_validator
+from starlette.responses import Response
 from typing import List, Union
 
 client = None
+security = HTTPBearer()
+
+load_dotenv()
+SECRET_KEY = os.environ.get("AUTH_SECRET_KEY")
+ALGORITHM = os.environ.get("AUTH_ALGORITHM")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,7 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-INFERENCE_SERVICE_URL = "http://localhost:8001/inference"
+INFERENCE_SERVICE_URL = "http://localhost:8001"
+USER_SERVICE_URL = "http://localhost:8003"
 
 # Inference models
 class TextContent(BaseModel):
@@ -110,7 +120,7 @@ class ChatMessage(BaseModel):
         
         return model
 
-class InferenceRequest(BaseModel):
+class UnauthInferenceRequest(BaseModel):
     messages: List[ChatMessage]
 
     @model_validator(mode="after")
@@ -133,14 +143,142 @@ class InferenceRequest(BaseModel):
             
         return model
 
+class AuthInferenceRequest(BaseModel):
+    user_query: ChatMessage
+    user_id: int
+    chat_id: int
+
+    @model_validator(mode="after")
+    def validate_user_query(cls, model):
+        if model.user_query.role != "user":
+            raise ValueError("user_query must have role 'user'")
+        
+        return model
+
 class InferenceResponse(BaseModel):
     answer: str
 
-@app.post("/inference")
-async def proxy_inference(req: InferenceRequest): 
-    response = await client.post(INFERENCE_SERVICE_URL, json=req.model_dump(mode="json"))
-    response.raise_for_status()
-    content = response.json()
-    answer = content.get("answer", "")
+# User authentication models
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(..., min_length=6)
 
-    return InferenceResponse(answer=answer)
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6)
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    
+@app.post("/unauth-inference")
+async def proxy_unauth_inference(req: UnauthInferenceRequest): 
+    response = await client.post(f"{INFERENCE_SERVICE_URL}/unauth-inference", json=req.model_dump(mode="json"))
+
+    return Response(
+        content=await response.aread(),
+        status_code=response.status_code,
+        headers=dict(response.headers)
+    )
+
+@app.post("/auth-inference")
+async def proxy_auth_inference(
+    req: AuthInferenceRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+    ):
+    headers = {
+        "Authorization": f"Bearer {credentials.credentials}"
+    }
+    
+    response = await client.post(
+        f"{INFERENCE_SERVICE_URL}/auth-inference", 
+        headers=headers,
+        json=req.model_dump()
+    )
+    return Response(
+        content=await response.aread(),
+        status_code=response.status_code,
+        headers=dict(response.headers)
+        )
+
+@app.get("/chats/{user_id}")
+async def get_user_chats(
+    user_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+    ):
+    headers = {
+        "Authorization": f"Bearer {credentials.credentials}"
+    }
+
+    response = await client.get(
+        f"{USER_SERVICE_URL}/chats/{user_id}", 
+        headers=headers
+    )
+
+    return Response(
+        content=await response.aread(),
+        status_code=response.status_code,
+        headers=dict(response.headers)
+        )
+
+@app.post("/chats/{user_id}")
+async def create_user_chat(
+    user_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    headers = {
+        "Authorization": f"Bearer {credentials.credentials}"
+    }
+
+    response = await client.post(
+        f"{USER_SERVICE_URL}/chats/{user_id}", 
+        headers=headers
+    )
+
+    return Response(
+        content=await response.aread(),
+        status_code=response.status_code,
+        headers=dict(response.headers)
+    )
+
+@app.get("/chat/{user_id}/{chat_id}")
+async def get_chat_history(
+    user_id: int, 
+    chat_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    headers = {
+        "Authorization": f"Bearer {credentials.credentials}"
+    }
+
+    response = await client.get(
+        f"{USER_SERVICE_URL}/chat/{user_id}/{chat_id}", 
+        headers=headers
+    )
+    
+    return Response(
+        content=await response.aread(),
+        status_code=response.status_code,
+        headers=dict(response.headers)
+    )
+
+@app.post("/auth/register")
+async def proxy_register(req: RegisterRequest):
+    response = await client.post(f"{USER_SERVICE_URL}/register", json=req.model_dump())
+
+    return Response(
+        content=await response.aread(),
+        status_code=response.status_code,
+        headers=dict(response.headers)
+    )
+
+@app.post("/auth/login", response_model=Token)
+async def proxy_login(req: LoginRequest):
+    response = await client.post(f"{USER_SERVICE_URL}/login", json=req.model_dump())
+
+    return Response(
+        content=await response.aread(),
+        status_code=response.status_code,
+        headers=dict(response.headers)
+    )
