@@ -112,15 +112,21 @@ jobs:
           done
           echo "Weaviate ready!"
 
-      - name: Wait for Postgres
+      - name: Wait for Postgres + Grant Perms
         run: |
           timeout=60 bash -c '
-            echo "Waiting Postgres..."
             until PGPASSWORD=password pg_isready -h localhost -p 5432 -U postgres -d authdb; do
-              echo "$(date)"
-              sleep 3
+              echo "Postgres $(date)"; sleep 3
             done
-            echo "✅ Postgres fully ready"
+            echo "✅ Postgres ready"
+            # Grant perms IMMEDIATELY after ready
+            PGPASSWORD=password psql -h localhost -U postgres -d authdb -c "
+              GRANT ALL ON SCHEMA public TO postgres;
+              GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
+              GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
+              ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
+              \dt  # Verify empty
+            "
           '
 
       - name: Start gateway service
@@ -234,15 +240,21 @@ jobs:
           done
           echo "Weaviate ready!"
 
-      - name: Wait for Postgres
+      - name: Wait for Postgres + Grant Perms
         run: |
           timeout=60 bash -c '
-            echo "Waiting Postgres..."
             until PGPASSWORD=password pg_isready -h localhost -p 5432 -U postgres -d authdb; do
-              echo "$(date)"
-              sleep 3
+              echo "Postgres $(date)"; sleep 3
             done
-            echo "✅ Postgres fully ready"
+            echo "✅ Postgres ready"
+            # Grant perms IMMEDIATELY after ready
+            PGPASSWORD=password psql -h localhost -U postgres -d authdb -c "
+              GRANT ALL ON SCHEMA public TO postgres;
+              GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
+              GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
+              ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
+              \dt  # Verify empty
+            "
           '
 
       - name: Start backend servers
