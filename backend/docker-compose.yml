@@ -9,6 +9,9 @@ services:
     depends_on:
       - inference_service
       - user_service
+    environment:
+      INFERENCE_SERVICE_URL: http://inference_service:8001
+      USER_SERVICE_URL: http://user_service:8003
 
   inference_service:
     build:
@@ -19,6 +22,8 @@ services:
       - rag_service
       - user_service
     environment:
+      RAG_SERVICE_URL: http://rag_service:8002
+      USER_SERVICE_URL: http://user_service:8003
       OPENAI_API_KEY: ${OPENAI_API_KEY}
 
   rag_service:
@@ -28,8 +33,6 @@ services:
       - "8002:8002"
     depends_on:
       - weaviate
-    environment:
-      GITHUB_ACTIONS: false  # or true if running in CI
 
   user_service:
     build:

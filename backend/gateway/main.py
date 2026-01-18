@@ -36,8 +36,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-INFERENCE_SERVICE_URL = "http://inference_service:8001"
-USER_SERVICE_URL = "http://user_service:8003"
+INFERENCE_SERVICE_URL = os.getenv(
+    "INFERENCE_SERVICE_URL",
+    "http://localhost:8001"
+)
+
+USER_SERVICE_URL = os.getenv(
+    "USER_SERVICE_URL",
+    "http://localhost:8003"
+)
 
 # Inference models
 class TextContent(BaseModel):
