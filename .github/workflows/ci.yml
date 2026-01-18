@@ -88,9 +88,9 @@ jobs:
 
       - name: Wait for backend services
         run: |
-          # Wait for RAG Service to be ready
-          until curl -f http://localhost:8002/docs; do
-            echo "Waiting for RAG Service..."
+          # Wait for Gateway Service to be ready
+          until curl -f http://localhost:8000/docs; do
+            echo "Waiting for Gateway Service..."
             sleep 2
           done
 
@@ -151,9 +151,9 @@ jobs:
 
       - name: Wait for backend services
         run: |
-          # Wait for RAG Service to be ready
-          until curl -f http://localhost:8002/docs; do
-            echo "Waiting for RAG Service..."
+          # Wait for Gateway Service to be ready
+          until curl -f http://localhost:8000/docs; do
+            echo "Waiting for Gateway Service..."
             sleep 2
           done
 
