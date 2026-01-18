@@ -119,13 +119,13 @@ jobs:
               echo "Postgres $(date)"; sleep 3
             done
             echo "✅ Postgres ready"
-            # Grant perms IMMEDIATELY after ready
             PGPASSWORD=password psql -h localhost -U postgres -d authdb -c "
               GRANT ALL ON SCHEMA public TO postgres;
               GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
               GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
               ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-              \dt  # Verify empty
+              -- List tables (SQL way)
+              SELECT schemaname, tablename FROM pg_tables WHERE schemaname = ''public'';
             "
           '
 
@@ -247,16 +247,16 @@ jobs:
               echo "Postgres $(date)"; sleep 3
             done
             echo "✅ Postgres ready"
-            # Grant perms IMMEDIATELY after ready
             PGPASSWORD=password psql -h localhost -U postgres -d authdb -c "
               GRANT ALL ON SCHEMA public TO postgres;
               GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
               GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
               ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-              \dt  # Verify empty
+              -- List tables (SQL way)
+              SELECT schemaname, tablename FROM pg_tables WHERE schemaname = ''public'';
             "
           '
-
+          
       - name: Start backend servers
         run: |
           source venv/bin/activate
