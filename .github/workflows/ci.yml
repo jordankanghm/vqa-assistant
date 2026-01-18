@@ -91,6 +91,11 @@ jobs:
         with:
           python-version: 3.11
 
+      - name: Print env (debug)
+        run: |
+          echo $AUTH_SECRET_KEY
+          echo $AUTH_ALGORITHM
+
       - name: Clean workspace
         run: |
           sudo rm -rf /usr/share/dotnet
