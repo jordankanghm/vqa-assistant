@@ -124,8 +124,7 @@ jobs:
               GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
               GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
               ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-              -- List tables (SQL way)
-              SELECT schemaname, tablename FROM pg_tables WHERE schemaname = ''public'';
+              SELECT ''Tables before:'' as status, count(*) as count FROM pg_tables WHERE schemaname = ''public'';
             "
           '
 
@@ -252,11 +251,10 @@ jobs:
               GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
               GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
               ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-              -- List tables (SQL way)
-              SELECT schemaname, tablename FROM pg_tables WHERE schemaname = ''public'';
+              SELECT ''Tables before:'' as status, count(*) as count FROM pg_tables WHERE schemaname = ''public'';
             "
           '
-          
+
       - name: Start backend servers
         run: |
           source venv/bin/activate
