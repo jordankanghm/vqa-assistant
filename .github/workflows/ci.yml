@@ -78,7 +78,7 @@ jobs:
       - name: Run Docker containers
         run: |
           cd backend
-          docker-compose up -d --build
+          docker compose up -d --build
 
       - name: Install backend dependencies
         run: |
@@ -147,7 +147,7 @@ jobs:
       - name: Run Docker containers
         run: |
           cd backend
-          docker-compose up -d --build
+          docker compose up -d --build
 
       - name: Wait for backend services
         run: |
