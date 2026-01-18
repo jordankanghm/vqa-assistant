@@ -60,6 +60,8 @@ jobs:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       GITHUB_ACTIONS: true
       AUTH_DATABASE_URL: postgresql://postgres:password@localhost:5432/authdb
+      AUTH_SECRET_KEY: ${{ secrets.AUTH_SECRET_KEY }}
+      AUTH_ALGORITHM: ${{ secrets.AUTH_ALGORITHM }}
     defaults:
       run:
         working-directory: .
@@ -165,6 +167,8 @@ jobs:
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       AUTH_DATABASE_URL: postgresql://postgres:password@localhost:5432/authdb
+      AUTH_SECRET_KEY: ${{ secrets.AUTH_SECRET_KEY }}
+      AUTH_ALGORITHM: ${{ secrets.AUTH_ALGORITHM }}
     defaults:
       run:
         working-directory: .
