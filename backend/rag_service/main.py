@@ -21,7 +21,7 @@ def get_weaviate_client():
         return weaviate.connect_to_local(host="localhost", port=8080, grpc_port=50051)
     
     else:
-        return weaviate.connect_to_local(host="127.0.0.1", port=8081, grpc_port=50051)
+        return weaviate.connect_to_local(host="127.0.0.1", port=8080, grpc_port=50051)
         
 @asynccontextmanager
 async def lifespan(app: FastAPI):

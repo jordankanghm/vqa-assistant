@@ -152,38 +152,43 @@ class SaveMessageRequest(BaseModel):
     content: list  # List[ContentItem]
 
 async def init_db():
-    async with pool.acquire() as conn:
-        # Create table for user authentication details
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                hashed_password TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+    try:
+        async with pool.acquire() as conn:
+            # Create table for user authentication details
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    email TEXT UNIQUE NOT NULL,
+                    hashed_password TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        # Create table for chats
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS chats (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id),
-                title TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+            # Create table for chats
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS chats (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    title TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        # Create table for chat history
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id SERIAL PRIMARY KEY,
-                chat_id INTEGER REFERENCES chats(id),
-                role TEXT NOT NULL,  -- 'user' or 'assistant'
-                content JSONB NOT NULL,  -- Array of ContentItem
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+            # Create table for chat history
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id SERIAL PRIMARY KEY,
+                    chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL,  -- 'user' or 'assistant'
+                    content JSONB NOT NULL,  -- Array of ContentItem
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+    except Exception as e:
+        print(f"init_db CRASH: {e}")  # Visible in tail -f
+        raise
 
 async def get_user(username: str) -> Optional[dict]:
     async with pool.acquire() as conn:
