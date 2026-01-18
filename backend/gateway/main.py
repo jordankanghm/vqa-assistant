@@ -14,10 +14,6 @@ from typing import List, Union
 client = None
 security = HTTPBearer()
 
-load_dotenv()
-SECRET_KEY = os.environ.get("AUTH_SECRET_KEY")
-ALGORITHM = os.environ.get("AUTH_ALGORITHM")
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -40,8 +36,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-INFERENCE_SERVICE_URL = "http://localhost:8001"
-USER_SERVICE_URL = "http://localhost:8003"
+INFERENCE_SERVICE_URL = "http://inference_service:8001"
+USER_SERVICE_URL = "http://user_service:8003"
 
 # Inference models
 class TextContent(BaseModel):

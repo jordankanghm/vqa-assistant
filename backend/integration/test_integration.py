@@ -3,7 +3,6 @@
 import pytest
 import requests
 import time
-from unittest.mock import Mock, MagicMock
 
 GATEWAY_URL = "http://localhost:8000"
 INFERENCE_URL = "http://localhost:8001"
