@@ -93,11 +93,6 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Print env (debug)
-        run: |
-          echo $AUTH_SECRET_KEY
-          echo $AUTH_ALGORITHM
-
       - name: Clean workspace
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -119,43 +114,14 @@ jobs:
           done
           echo "Weaviate ready!"
 
-      - name: Wait for Postgres + Grant Perms
-        run: |
-          # Wait
-          timeout=60 bash -c 'until PGPASSWORD=password pg_isready -h localhost -p 5432 -U postgres -d authdb; do sleep 3; done'
-          
-          # Grant perms only
-          PGPASSWORD=password psql -h localhost -U postgres -d authdb -c "
-            GRANT ALL ON SCHEMA public TO postgres;
-            GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
-            GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
-            ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-          "
-
-      - name: Start gateway service
+      - name: Start backend servers
         run: |
           source venv/bin/activate
-          uvicorn backend.gateway.main:app --host 0.0.0.0 --port 8000 --log-level debug > gateway.log 2>&1 &
-          sleep 5
-          tail -50 gateway.log
-
-      - name: Start inference service
-        run: |
-          source venv/bin/activate
+          uvicorn backend.gateway.main:app --host 0.0.0.0 --port 8000 &
           uvicorn backend.inference_service.main:app --host 0.0.0.0 --port 8001 &
-          sleep 5
-
-      - name: Start RAG service
-        run: |
-          source venv/bin/activate
           uvicorn backend.rag_service.main:app --host 0.0.0.0 --port 8002 &
-          sleep 5
-
-      - name: Start user service
-        run: |
-          source venv/bin/activate
           uvicorn backend.user_service.main:app --host 0.0.0.0 --port 8003 &
-          sleep 5
+          sleep 10  # adjust if needed for servers to be ready
 
       - name: Run tests
         run: |
@@ -244,19 +210,6 @@ jobs:
             sleep 2
           done
           echo "Weaviate ready!"
-
-      - name: Wait for Postgres + Grant Perms
-        run: |
-          # Wait
-          timeout=60 bash -c 'until PGPASSWORD=password pg_isready -h localhost -p 5432 -U postgres -d authdb; do sleep 3; done'
-          
-          # Grant perms only
-          PGPASSWORD=password psql -h localhost -U postgres -d authdb -c "
-            GRANT ALL ON SCHEMA public TO postgres;
-            GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO postgres;
-            GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO postgres;
-            ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
-          "
 
       - name: Start backend servers
         run: |
