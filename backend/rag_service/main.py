@@ -21,7 +21,7 @@ def get_weaviate_client():
         return weaviate.connect_to_local(host="localhost", port=8080, grpc_port=50051)
     
     else:
-        return weaviate.connect_to_local(host="127.0.0.1", port=8081, grpc_port=50051)
+        return weaviate.connect_to_local(host="127.0.0.1", port=8080, grpc_port=50051)
         
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -228,7 +228,6 @@ def ingest_wikipedia_articles(categories):
 
 # Retrieves the most relevant summary based on the query, then retrieves the top_k chunks from that summary most similar to the query.
 def vector_search(query, top_k=3, min_similarity=0.5):
-    print(f"client: {client}")
     summaries_collection = client.collections.use("Summary")
     chunks_collection = client.collections.use("Chunk")
 

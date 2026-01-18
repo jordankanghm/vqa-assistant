@@ -1,6 +1,6 @@
-# Run in root directory using: pytest backend/db_service/tests/test_db.py -v
+# Run in root directory using: python -m pytest backend/rag_service/tests/test_db.py -v
 import pytest
-from backend.db_service.main import (
+from backend.rag_service.main import (
     app,
     chunk_text,
     create_collections,
@@ -9,13 +9,25 @@ from backend.db_service.main import (
     preprocess_text
 )
 from fastapi.testclient import TestClient
-from unittest.mock import call, MagicMock, Mock, patch
+from unittest.mock import call, Mock, patch
 
-client = TestClient(app)
+@pytest.fixture
+def mock_lifespan(monkeypatch):
+    async def noop_lifespan(app):
+        # Startup: nothing
+        yield
+        # Shutdown: nothing
+    
+    monkeypatch.setattr('backend.rag_service.main.lifespan', noop_lifespan)
+
+    return app
+
+@pytest.fixture
+def client(mock_lifespan):
+    """Use mocked lifespan client"""
+    return TestClient(mock_lifespan)
 
 class TestPreprocessing:
-    """Unit tests for text preprocessing functions."""
-
     @pytest.mark.parametrize("input_text, expected", [
         ("[[AI|Artificial Intelligence]]", "Artificial Intelligence"),
         ("[[Simple]]", "Simple"),
@@ -28,13 +40,11 @@ class TestPreprocessing:
         ("", ""),
     ])
     def test_preprocess_text_patterns(self, input_text, expected):
-        """Test preprocess_text handles all Wikipedia patterns."""
         result = preprocess_text(input_text)
 
         assert result == expected, f"Failed: '{input_text}' → '{result}'"
 
     def test_preprocess_text_preserves_punctuation(self):
-        """Ensure punctuation survives preprocessing."""
         text = "Hello, world! It's ML."
         result = preprocess_text(text)
 
@@ -42,23 +52,18 @@ class TestPreprocessing:
         assert "!" in result
         assert "." in result
 
-
 class TestChunking:
-    """Unit tests for text chunking."""
     def test_chunk_text_max_length(self):
-        """Respect max_len parameter."""
         long_text = "A" * 600
         chunks = chunk_text(long_text, max_len=500)
 
         assert len(chunks) == 2  # Should split
 
     def test_chunk_text_empty(self):
-        """Handle empty input."""
         assert len(chunk_text("")) == 0
         assert len(chunk_text("   ")) == 0
 
     def test_chunk_text_single_sentence(self):
-        """Single sentence stays one chunk."""
         text = "One sentence only."
         chunks = chunk_text(text)
 
@@ -66,17 +71,12 @@ class TestChunking:
         assert "One sentence only." in chunks[0]
 
 class TestSectionExtraction:
-    """Tests for Wikipedia section extraction."""
-
     @patch('wikipediaapi.WikipediaPage.sections')
     def test_get_all_section_texts(self, mock_sections):
-        """Test recursive section extraction."""
-        # Mock section structure
         mock_section1 = Mock()
         mock_section1.title = "Valid Section"
         mock_section1.text = "Section text 1"
         mock_section1.sections = []
-        
         mock_subsection = Mock()
         mock_subsection.title = "Subsection"
         mock_subsection.text = "Subsection text"
@@ -98,13 +98,10 @@ class TestSectionExtraction:
         assert "References" not in "".join(result)
 
 class TestWeaviateCollections:
-    """Tests for collection management (mocked Weaviate)."""
-
-    @patch('backend.db_service.main.client')
-    def test_create_collections(self, mock_client):
-        """Test collection schema creation."""
+    @patch('backend.rag_service.main.client')
+    def test_create_collections(self, mock_weaviate_client):
         mock_collections = Mock()
-        mock_client.collections = mock_collections
+        mock_weaviate_client.collections = mock_collections
         mock_exists = Mock(side_effect=[False, False])
         mock_create = Mock()
         mock_collections.exists = mock_exists
@@ -114,17 +111,14 @@ class TestWeaviateCollections:
 
         assert mock_create.call_count == 2
 
-    @patch('backend.db_service.main.client')
-    def test_delete_collections(self, mock_client):
-        """Test collection deletion."""
+    @patch('backend.rag_service.main.client')
+    def test_delete_collections(self, mock_weaviate_client):
         mock_collections = Mock()
-        mock_client.collections = mock_collections
+        mock_weaviate_client.collections = mock_collections
         
-        # Mock delete method
         mock_delete = Mock()
         mock_collections.delete = mock_delete
         
-        # Test deletion
         collections_to_delete = ["Summary", "Chunk", "TestCollection"]
         delete_collections(collections_to_delete)
         
@@ -137,15 +131,14 @@ class TestWeaviateCollections:
         ], any_order=False)
 
 class TestVectorSearchAPI:
-    """Tests for the /search endpoint of the DB service."""
     @pytest.mark.parametrize("valid_payload", [
         {"query": "machine learning", "top_k": 3, "min_similarity": 0.7},
         {"query": "What is AI?", "top_k": 1, "min_similarity": 0.5},
         {"query": "test query", "top_k": 5},  # Uses defaults
         {"query": "deep learning models"},  # Minimal valid payload
     ])
-    @patch("backend.db_service.main.vector_search")
-    def test_search_valid_payloads(self, mock_vector_search, valid_payload):
+    @patch("backend.rag_service.main.vector_search")
+    def test_search_valid_payloads(self, mock_vector_search, valid_payload, client):
         # Mock vector_search to return realistic results
         mock_results = [
             (0.85, {"text": "This is a relevant machine learning chunk"}),
@@ -191,13 +184,13 @@ class TestVectorSearchAPI:
         "not a dict",                 # Wrong root type
         [{"query": "test"}],          # List instead of dict
     ])
-    def test_search_invalid_payloads(self, invalid_payload):
+    def test_search_invalid_payloads(self, invalid_payload, client):
         response = client.post("/search", json=invalid_payload)
 
-        assert response.status_code == 422  # Pydantic validation error
+        assert response.status_code == 422
 
-    @patch("backend.db_service.main.vector_search", side_effect=Exception("Vector search failed"))
-    def test_search_handles_exceptions(self, mock_vector_search):
+    @patch("backend.rag_service.main.vector_search", side_effect=Exception("Vector search failed"))
+    def test_search_handles_exceptions(self, mock_vector_search, client):
         """Test error handling when vector_search fails."""
         payload = {"query": "test", "top_k": 3}
 
