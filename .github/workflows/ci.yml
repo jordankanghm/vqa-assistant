@@ -93,5 +93,4 @@ jobs:
 
       - name: Build and run e2e tests
         run: |
-          docker compose build e2e_tests
-          docker compose run --rm e2e_tests
+          docker compose up --build e2e_tests
