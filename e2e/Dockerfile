@@ -20,7 +20,7 @@ RUN npx playwright install --with-deps
 COPY . .
 
 # Wait for services before running tests
-CMD ["./wait-for.sh", \
+CMD ["sh", "./wait-for.sh", \
      "http://frontend:80/", \
      "http://gateway:8000/docs", \
      "http://inference_service:8001/docs", \
