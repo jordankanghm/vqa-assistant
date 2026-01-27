@@ -1,9 +1,31 @@
-version: "3.9"
-
 services:
+  e2e_tests:
+    build:
+      context: ./e2e
+    depends_on:
+      - backend_integration_tests
+    environment:
+      GATEWAY_URL: http://host.docker.internal:8000
+      USER_SERVICE_URL: http://host.docker.internal:8003
+      FRONTEND_URL: http://host.docker.internal:3000
+
+  backend_integration_tests:
+    build:
+      context: ./backend/integration
+    depends_on:
+      - gateway
+      - user_service
+      - inference_service
+      - rag_service
+    environment:
+      GATEWAY_URL: http://gateway:8000
+      INFERENCE_SERVICE_URL: http://inference_service:8001
+      RAG_SERVICE_URL: http://rag_service:8002
+      USER_SERVICE_URL: http://user_service:8003
+
   gateway:
     build:
-      context: ./gateway
+      context: ./backend/gateway
     ports:
       - "8000:8000"
     depends_on:
@@ -15,7 +37,7 @@ services:
 
   inference_service:
     build:
-      context: ./inference_service
+      context: ./backend/inference_service
     ports:
       - "8001:8001"
     depends_on:
@@ -28,7 +50,7 @@ services:
 
   rag_service:
     build:
-      context: ./rag_service
+      context: ./backend/rag_service
     ports:
       - "8002:8002"
     depends_on:
@@ -36,7 +58,7 @@ services:
 
   user_service:
     build:
-      context: ./user_service
+      context: ./backend/user_service
     ports:
       - "8003:8003"
     depends_on:
@@ -67,3 +89,11 @@ services:
       PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
       DEFAULT_VECTORIZER_MODULE: none
       ENABLE_MODULES: ""
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway

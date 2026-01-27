@@ -1,13 +1,14 @@
 # Run in root directory using: pytest backend/integration/test_integration.py -v
 
+import os
 import pytest
 import requests
 import time
 
-GATEWAY_URL = "http://localhost:8000"
-INFERENCE_URL = "http://localhost:8001"
-RAG_URL = "http://localhost:8002"
-USER_URL = "http://localhost:8003"
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8000")
+INFERENCE_SERVICE_URL = os.environ.get("INFERENCE_SERVICE_URL", "http://localhost:8001")
+RAG_SERVICE_URL = os.environ.get("RAG_SERVICE_URL", "http://localhost:8002")
+USER_SERVICE_URL = os.environ.get("USER_SERVICE_URL", "http://localhost:8003")
 
 # User authentication test variables
 TEST_USER = "integration_test_user"
@@ -21,11 +22,12 @@ def setup():
     # Wait for services
     for _ in range(30):
         try:
-            if (requests.get("http://localhost:8000/docs", timeout=2).ok and
-                requests.get("http://localhost:8001/docs", timeout=2).ok and
-                requests.get("http://localhost:8002/docs", timeout=2).ok and
-                requests.get("http://localhost:8003/docs", timeout=2).ok):
+            if (requests.get(f"{GATEWAY_URL}/docs", timeout=2).ok and
+                requests.get(f"{INFERENCE_SERVICE_URL}/docs", timeout=2).ok and
+                requests.get(f"{RAG_SERVICE_URL}/docs", timeout=2).ok and
+                requests.get(f"{USER_SERVICE_URL}/docs", timeout=2).ok):
                 break
+
         except:
             pass
         time.sleep(1)
@@ -45,7 +47,7 @@ def auth_setup():
     
     # Cleanup
     try:
-        requests.delete(f"{USER_URL}/users/{TEST_USER}", timeout=3)
+        requests.delete(f"{USER_SERVICE_URL}/users/{TEST_USER}", timeout=3)
     except:
         pass
     
@@ -147,7 +149,7 @@ class TestGateway:
         login_resp = requests.post(f"{GATEWAY_URL}/auth/login", json={
             "username": TEST_USER,
             "password": TEST_PASSWORD
-        }, timeout=10)
+        }, timeout=20)
         login_json = login_resp.json()
         token = login_json["access_token"]
         user_id = login_json["user_id"]
@@ -205,7 +207,7 @@ class TestGateway:
     # Login/Register
     def test_register_gateway(self, auth_setup):
         # Delete user if they exist
-        requests.delete(f"{USER_URL}/users/{TEST_USER}", timeout=3)
+        requests.delete(f"{USER_SERVICE_URL}/users/{TEST_USER}", timeout=3)
 
         payload = {
             "username": TEST_USER,
@@ -237,7 +239,7 @@ class TestGateway:
             "password": TEST_PASSWORD
         }
         
-        response = requests.post(f"{GATEWAY_URL}/auth/login", json=payload, timeout=10)
+        response = requests.post(f"{GATEWAY_URL}/auth/login", json=payload, timeout=20)
         
         assert response.status_code == 200
         data = response.json()
@@ -247,14 +249,14 @@ class TestGateway:
 
     def test_login_wrong_creds_gateway(self):
         # Delete user if they exist
-        requests.delete(f"{USER_URL}/users/wronguser", timeout=3)
+        requests.delete(f"{USER_SERVICE_URL}/users/wronguser", timeout=3)
 
         payload = {
             "username": "wronguser",
             "password": "wrongpass"
         }
         
-        response = requests.post(f"{GATEWAY_URL}/auth/login", json=payload, timeout=10)
+        response = requests.post(f"{GATEWAY_URL}/auth/login", json=payload, timeout=20)
         
         assert response.status_code == 401
         assert response.json()["detail"] == "Incorrect username or password"
@@ -272,7 +274,7 @@ class TestInference:
             }]
         }
 
-        response = requests.post(f"{INFERENCE_URL}/unauth-inference", json=payload)
+        response = requests.post(f"{INFERENCE_SERVICE_URL}/unauth-inference", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -294,7 +296,7 @@ class TestInference:
             }]
         }
 
-        response = requests.post(f"{INFERENCE_URL}/unauth-inference", json=payload)
+        response = requests.post(f"{INFERENCE_SERVICE_URL}/unauth-inference", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -315,7 +317,7 @@ class TestInference:
             }]
         }
 
-        response = requests.post(f"{INFERENCE_URL}/unauth-inference", json=payload)
+        response = requests.post(f"{INFERENCE_SERVICE_URL}/unauth-inference", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -342,7 +344,7 @@ class TestInference:
             }]
         }
 
-        response = requests.post(f"{INFERENCE_URL}/unauth-inference", json=payload)
+        response = requests.post(f"{INFERENCE_SERVICE_URL}/unauth-inference", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -355,7 +357,7 @@ class TestInference:
         login_resp = requests.post(f"{GATEWAY_URL}/auth/login", json={
             "username": TEST_USER,
             "password": TEST_PASSWORD
-        }, timeout=10)
+        }, timeout=20)
         login_json = login_resp.json()
         token = login_json["access_token"]
         user_id = login_json["user_id"]
@@ -386,7 +388,7 @@ class TestInference:
         }
         
         response = requests.post(
-            f"{INFERENCE_URL}/auth-inference",
+            f"{INFERENCE_SERVICE_URL}/auth-inference",
             json=payload,
             headers=headers,
             timeout=30
@@ -405,7 +407,7 @@ class TestInference:
             "chat_id": "chat123"
         }
         
-        response = requests.post(f"{INFERENCE_URL}/auth-inference", json=payload, timeout=10)
+        response = requests.post(f"{INFERENCE_SERVICE_URL}/auth-inference", json=payload, timeout=10)
         
         assert response.status_code == 401
         assert response.json()["detail"] == "Not authenticated"
@@ -420,13 +422,13 @@ class TestRAG:
             "categories": ["Machine learning"],
             "limit_pages": 2
         }
-        requests.post(f"{RAG_URL}/ingest-wikipedia", json=ingest_payload, timeout=60)
+        requests.post(f"{RAG_SERVICE_URL}/ingest-wikipedia", json=ingest_payload, timeout=60)
         
         time.sleep(10)
         
         # Verify data ingested
         test_query = {"query": "machine learning", "top_k": 1, "min_similarity": 0.1}
-        response = requests.post(f"{RAG_URL}/search", json=test_query, timeout=60)
+        response = requests.post(f"{RAG_SERVICE_URL}/search", json=test_query, timeout=60)
         
         if response.status_code != 200 or response.json()["count"] == 0:
             print("⚠️  Warning: Test data ingestion may have failed")
@@ -435,7 +437,7 @@ class TestRAG:
 
     def test_rag_returns_chunks(self, setup_test_wikipedia_data):
         payload = {"query": "machine learning", "top_k": 3, "min_similarity": 0.1}
-        response = requests.post(f"{RAG_URL}/search", json=payload, timeout=60)
+        response = requests.post(f"{RAG_SERVICE_URL}/search", json=payload, timeout=60)
         
         assert response.status_code == 200
         data = response.json()
@@ -452,8 +454,8 @@ class TestRAG:
         payload_high = {"query": "machine learning", "top_k": 5, "min_similarity": 0.8}
         payload_low = {"query": "machine learning", "top_k": 5, "min_similarity": 0.2}
 
-        resp_high = requests.post(f"{RAG_URL}/search", json=payload_high, timeout=60).json()
-        resp_low = requests.post(f"{RAG_URL}/search", json=payload_low, timeout=60).json()
+        resp_high = requests.post(f"{RAG_SERVICE_URL}/search", json=payload_high, timeout=60).json()
+        resp_low = requests.post(f"{RAG_SERVICE_URL}/search", json=payload_low, timeout=60).json()
 
         assert resp_high["count"] <= resp_low["count"]
 
@@ -472,13 +474,13 @@ class TestUser:
         assert isinstance(data["user_id"], int)
         
         # Cleanup
-        requests.delete(f"{USER_URL}/users/{TEST_USER}")
+        requests.delete(f"{USER_SERVICE_URL}/users/{TEST_USER}")
 
     def test_login_user(self, auth_setup):
         resp = requests.post(f"{GATEWAY_URL}/auth/login", json={
             "username": TEST_USER,
             "password": TEST_PASSWORD
-        }, timeout=10)
+        }, timeout=20)
         
         assert resp.status_code == 200
         data = resp.json()
@@ -498,12 +500,12 @@ class TestUser:
 
     def test_login_wrong_username(self):
         # Delete user if they exist
-        requests.delete(f"{USER_URL}/users/wronguser", timeout=3)
+        requests.delete(f"{USER_SERVICE_URL}/users/wronguser", timeout=3)
         
         resp = requests.post(f"{GATEWAY_URL}/auth/login", json={
             "username": "wronguser",
             "password": "wrongpass"
-        })
+        }, timeout=20)
         
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Incorrect username or password"
@@ -512,7 +514,7 @@ class TestUser:
         resp = requests.post(f"{GATEWAY_URL}/auth/login", json={
             "username": TEST_USER,
             "password": "wrongpass"
-        })
+        }, timeout=20)
         
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Incorrect username or password"
