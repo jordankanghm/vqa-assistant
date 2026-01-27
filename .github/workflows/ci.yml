@@ -56,10 +56,14 @@ jobs:
 
   backend-integration-tests-and-e2e-tests:
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      AUTH_SECRET_KEY: ${{ secrets.AUTH_SECRET_KEY }}
+      AUTH_ALGORITHM: ${{ secrets.AUTH_ALGORITHM }}
     defaults:
       run:
         working-directory: .
-    needs: [backend-unit-tests]
+    needs: [backend-unit-tests, frontend-unit-tests]
     steps:
       - uses: actions/checkout@v3
 
@@ -82,7 +86,10 @@ jobs:
       - name: Build and run integration tests
         run: |
           docker compose build backend_integration_tests
-          docker compose run --rm backend_integration_tests 
+          docker compose run --rm backend_integration_tests
+
+      - name: Show gateway logs
+        run: docker compose logs gateway 
 
       - name: Build and run e2e tests
         run: |
