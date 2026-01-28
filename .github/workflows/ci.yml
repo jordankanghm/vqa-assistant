@@ -88,9 +88,6 @@ jobs:
           docker compose build backend_integration_tests
           docker compose run --rm backend_integration_tests
 
-      - name: Show gateway logs
-        run: docker compose logs gateway 
-
       - name: Build and run e2e tests
         run: |
           docker compose up --build e2e_tests
