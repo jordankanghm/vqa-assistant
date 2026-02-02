@@ -39,8 +39,15 @@ system_msg = "You are a helpful visual question answering assistant."
 
 app = FastAPI(lifespan=lifespan)
 
-RAG_SERVICE_URL = "http://localhost:8002"
-USER_SERVICE_URL = "http://localhost:8003"
+RAG_SERVICE_URL = os.getenv(
+    "RAG_SERVICE_URL",
+    "http://localhost:8002"
+)
+
+USER_SERVICE_URL = os.getenv(
+    "USER_SERVICE_URL",
+    "http://localhost:8003"
+)
 
 class TextContent(BaseModel):
     type: str

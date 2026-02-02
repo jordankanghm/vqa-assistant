@@ -1,0 +1,99 @@
+services:
+  e2e_tests:
+    build:
+      context: ./e2e
+    depends_on:
+      - backend_integration_tests
+    environment:
+      GATEWAY_URL: http://host.docker.internal:8000
+      USER_SERVICE_URL: http://host.docker.internal:8003
+      FRONTEND_URL: http://host.docker.internal:3000
+
+  backend_integration_tests:
+    build:
+      context: ./backend/integration
+    depends_on:
+      - gateway
+      - user_service
+      - inference_service
+      - rag_service
+    environment:
+      GATEWAY_URL: http://gateway:8000
+      INFERENCE_SERVICE_URL: http://inference_service:8001
+      RAG_SERVICE_URL: http://rag_service:8002
+      USER_SERVICE_URL: http://user_service:8003
+
+  gateway:
+    build:
+      context: ./backend/gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - inference_service
+      - user_service
+    environment:
+      INFERENCE_SERVICE_URL: http://inference_service:8001
+      USER_SERVICE_URL: http://user_service:8003
+
+  inference_service:
+    build:
+      context: ./backend/inference_service
+    ports:
+      - "8001:8001"
+    depends_on:
+      - rag_service
+      - user_service
+    environment:
+      RAG_SERVICE_URL: http://rag_service:8002
+      USER_SERVICE_URL: http://user_service:8003
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+  rag_service:
+    build:
+      context: ./backend/rag_service
+    ports:
+      - "8002:8002"
+    depends_on:
+      - weaviate
+
+  user_service:
+    build:
+      context: ./backend/user_service
+    ports:
+      - "8003:8003"
+    depends_on:
+      - postgres
+    environment:
+      AUTH_DATABASE_URL: postgres://postgres:password@postgres:5432/authdb
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY}
+      AUTH_ALGORITHM: ${AUTH_ALGORITHM}
+
+  postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: authdb
+    ports:
+      - "5432:5432"
+
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.27.0
+    restart: always
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    environment:
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DEFAULT_VECTORIZER_MODULE: none
+      ENABLE_MODULES: ""
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway

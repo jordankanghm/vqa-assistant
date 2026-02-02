@@ -17,11 +17,7 @@ client, model, wiki_wiki = None, None, None
 
 def get_weaviate_client():
     """Get Weaviate client based on env."""
-    if os.getenv("GITHUB_ACTIONS") == "true":
-        return weaviate.connect_to_local(host="localhost", port=8080, grpc_port=50051)
-    
-    else:
-        return weaviate.connect_to_local(host="127.0.0.1", port=8080, grpc_port=50051)
+    return weaviate.connect_to_local(host="weaviate", port=8080, grpc_port=50051)
         
 @asynccontextmanager
 async def lifespan(app: FastAPI):

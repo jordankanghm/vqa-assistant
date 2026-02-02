@@ -54,37 +54,16 @@ jobs:
           source venv/bin/activate
           python -m pytest backend/*/tests/
 
-  backend-integration-tests:
+  backend-integration-tests-and-e2e-tests:
     runs-on: ubuntu-latest
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      GITHUB_ACTIONS: true
-      AUTH_DATABASE_URL: postgresql://postgres:password@localhost:5432/authdb
       AUTH_SECRET_KEY: ${{ secrets.AUTH_SECRET_KEY }}
       AUTH_ALGORITHM: ${{ secrets.AUTH_ALGORITHM }}
     defaults:
       run:
         working-directory: .
-    needs: [backend-unit-tests]
-    services:
-      postgres:
-        image: postgres:16
-        ports:
-          - 5432:5432
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: authdb
-      weaviate:
-        image: cr.weaviate.io/semitechnologies/weaviate:1.27.0
-        ports:
-          - 8080:8080
-          - 50051:50051
-        env:
-          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: true
-          PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
-          DEFAULT_VECTORIZER_MODULE: none
-          ENABLE_MODULES: ''
+    needs: [backend-unit-tests, frontend-unit-tests]
     steps:
       - uses: actions/checkout@v3
 
@@ -100,135 +79,15 @@ jobs:
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           df -h  # Check disk space
 
-      - name: Install dependencies
+      - name: Build and run Docker containers
         run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install -r backend/integration/requirements.txt
+          docker compose up -d --build frontend gateway inference_service rag_service user_service postgres weaviate
 
-      - name: Wait for Weaviate
+      - name: Build and run integration tests
         run: |
-          until curl -f http://localhost:8080/v1/.well-known/ready; do
-            echo "Waiting for Weaviate..."
-            sleep 2
-          done
-          echo "Weaviate ready!"
+          docker compose build backend_integration_tests
+          docker compose run --rm backend_integration_tests
 
-      - name: Start backend servers
+      - name: Build and run e2e tests
         run: |
-          source venv/bin/activate
-          uvicorn backend.gateway.main:app --host 0.0.0.0 --port 8000 &
-          uvicorn backend.inference_service.main:app --host 0.0.0.0 --port 8001 &
-          uvicorn backend.rag_service.main:app --host 0.0.0.0 --port 8002 &
-          uvicorn backend.user_service.main:app --host 0.0.0.0 --port 8003 &
-          sleep 10  # adjust if needed for servers to be ready
-
-      - name: Run tests
-        run: |
-          source venv/bin/activate
-          python -m pytest backend/integration/test_integration.py
-
-  e2e-tests:
-    runs-on: ubuntu-latest
-    env:
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      AUTH_DATABASE_URL: postgresql://postgres:password@localhost:5432/authdb
-      AUTH_SECRET_KEY: ${{ secrets.AUTH_SECRET_KEY }}
-      AUTH_ALGORITHM: ${{ secrets.AUTH_ALGORITHM }}
-    defaults:
-      run:
-        working-directory: .
-    needs: [backend-unit-tests, frontend-unit-tests, backend-integration-tests]  # only run after unit tests pass
-    services:
-      postgres:
-        image: postgres:16
-        ports:
-          - 5432:5432
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: authdb
-      weaviate:
-        image: cr.weaviate.io/semitechnologies/weaviate:1.27.0
-        ports:
-          - 8080:8080
-          - 50051:50051
-        env:
-          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: true
-          PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
-          DEFAULT_VECTORIZER_MODULE: none
-          ENABLE_MODULES: ''
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Python (for backend servers)
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-
-      - name: Clean workspace
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          df -h  # Check disk space
-
-      - name: Install backend dependencies
-        run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install -r backend/integration/requirements.txt
-
-      - name: Install Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
-
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm install
-          cd ..
-
-      - name: Install Playwright dependencies
-        run: |
-          cd e2e
-          npm init -y  # Create package.json if missing
-          npm install @playwright/test --save-dev
-          cd ..
-
-      - name: Install Playwright browsers
-        run: |
-          cd e2e
-          npx playwright install --with-deps
-          cd ..
-
-      - name: Wait for Weaviate
-        run: |
-          until curl -f http://localhost:8080/v1/.well-known/ready; do
-            echo "Waiting for Weaviate..."
-            sleep 2
-          done
-          echo "Weaviate ready!"
-
-      - name: Start backend servers
-        run: |
-          source venv/bin/activate
-          uvicorn backend.gateway.main:app --host 0.0.0.0 --port 8000 &
-          uvicorn backend.inference_service.main:app --host 0.0.0.0 --port 8001 &
-          uvicorn backend.rag_service.main:app --host 0.0.0.0 --port 8002 &
-          uvicorn backend.user_service.main:app --host 0.0.0.0 --port 8003 &
-          sleep 10  # adjust if needed for servers to be ready
-
-      - name: Start frontend server
-        run: |
-          cd frontend
-          npm start &
-          sleep 10  # wait for frontend to be ready
-          curl -f http://localhost:3000 || exit 1
-          cd ..
-
-      - name: Run Playwright e2e tests
-        run: |
-          cd e2e
-          npx playwright test --config=./playwright.config.js --timeout=180000
+          docker compose up --build e2e_tests

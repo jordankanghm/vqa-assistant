@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 
-const GATEWAY_URL = "http://localhost:8000"
+const GATEWAY_URL = "http://host.docker.internal:8000";  // For browsers to route directly to Docker network
 
 const ChatMessage = ({ message, onImageClick }) => {
   // Extract text parts concatenated as text

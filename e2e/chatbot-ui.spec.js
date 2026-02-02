@@ -2,6 +2,10 @@
 
 const { test, expect } = require('@playwright/test');
 
+const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:8000';
+const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:8003';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
 const TEST_USER = {
   username: "testuser",
   email: "test@example.com", 
@@ -10,7 +14,7 @@ const TEST_USER = {
 
 // Pre-register test user before each test
 test.beforeEach(async ({ request }) => {
-  const response = await request.post('http://localhost:8003/register', {
+  const response = await request.post(`${USER_SERVICE_URL}/register`, {
     headers: { "Content-Type": "application/json" },
     data: TEST_USER
   });
@@ -21,7 +25,7 @@ test.beforeEach(async ({ request }) => {
 
 // Delete test user after each test
 test.afterEach(async ({ page }) => {
-  const response = await page.request.delete(`http://localhost:8003/users/${TEST_USER.username}`);
+  const response = await page.request.delete(`${USER_SERVICE_URL}/users/${TEST_USER.username}`);
 });
 
 const imageUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg";
@@ -34,10 +38,20 @@ const imgBuffer = Buffer.from(
 // === AUTHENTICATION TESTS ===
 test.describe('User Authentication', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:3000');
+    await page.goto(FRONTEND_URL);
   });
 
   test('successful login shows user info and logout button', async ({ page }) => {
+    const res = await page.request.post(`${GATEWAY_URL}/auth/login`, {
+      data: {
+        username: TEST_USER.username,
+        password: TEST_USER.password
+      }
+    });
+
+    if (res.status() !== 200) {
+      throw new Error(`Test user ${TEST_USER.username} does not exist or wrong password. Create the user first.`);
+    }
     // Login
     await page.getByTestId("header-login").click();
     await page.getByPlaceholder("Username").fill(TEST_USER.username);
@@ -46,6 +60,8 @@ test.describe('User Authentication', () => {
 
     // Verify authenticated state
     await page.waitForTimeout(5000);
+    // Take a screenshot for debugging
+    await page.screenshot({ path: '/app/debug_login.png', fullPage: true });
     await expect(page.getByText(new RegExp(`Logged in as ${TEST_USER.username}`, 'i'))).toBeVisible();
     await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
     
@@ -72,7 +88,7 @@ test.describe('User Authentication', () => {
 
   test('successful registration closes modal and logs in user', async ({ page }) => {
     // Ensure user does not exist before registering
-    const response = await page.request.delete('http://localhost:8003/users/newuser');
+    const response = await page.request.delete(`${USER_SERVICE_URL}/users/newuser`);
     expect(response.status()).toBeGreaterThanOrEqual(200);  // 200 or 404 OK
     expect(response.status()).toBeLessThan(500);  // reject server error
 
@@ -119,7 +135,7 @@ test.describe('User Authentication', () => {
 // === UNAUTHENTICATED TESTS ===
 test.describe('Unauthenticated Chat Management', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:3000');
+    await page.goto(FRONTEND_URL);
   });
 
   test('Send text message and receive bot reply', async ({ page }) => {
@@ -196,7 +212,7 @@ test.describe('Unauthenticated Chat Management', () => {
 test.describe('Authenticated Chat Management', () => {
   // Login before each test
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:3000');
+    await page.goto(FRONTEND_URL);
     await page.getByTestId("header-login").click();
     await page.getByPlaceholder("Username").fill(TEST_USER.username);
     await page.getByPlaceholder("Password").fill(TEST_USER.password);
