@@ -243,55 +243,32 @@ def vector_search(query, top_k=3, min_similarity=0.5):
         return []
     
     top_summary = summary_results.objects[0]
+    summary_id = top_summary.uuid
     cosine_sim = 1.0 - top_summary.metadata.distance
     print(f"Top Summary (cosine={cosine_sim:.3f}): {top_summary.properties['title']}")
 
-    chunk_ids = top_summary.properties.get("chunkIds", [])
+    # Vector search chunks belonging to that summary
+    chunk_results = chunks_collection.query.near_vector(
+        near_vector=query_vector,
+        limit=top_k,
+        filters={
+            "path": ["summaryId"],
+            "operator": "Equal",
+            "valueText": summary_id
+        },
+        return_metadata=["distance"],
+        return_properties=["text"]
+    )
 
-    if not chunk_ids:
-        print("No chunks associated with the top summary.")
-        return []
+    results = []
 
-    # Retrieve chunk objects based on chunk IDs
-    chunks = []
-    for chunk_id in chunk_ids:
-        chunk_obj = chunks_collection.query.fetch_object_by_id(uuid=chunk_id)
-
-        if chunk_obj and chunk_obj.properties:
-            chunks.append(chunk_obj.properties)
-
-        else:
-            print(f"Chunk {chunk_id} not found.")
-    
-    if not chunks:
-        return []
-    
-    # Find top_k chunks most similar to the query
-    top_k_heap = []
-    high_similarity_chunks = 0
-    
-    for chunk in chunks:
-        chunk_vec = model.encode([chunk['text']])[0].tolist()
-        similarity = cosine_similarity([query_vector], [chunk_vec])[0][0]
+    for obj in chunk_results.objects:
+        similarity = 1.0 - obj.metadata.distance
         
-        # Filter chunks below threshold
         if similarity >= min_similarity:
-            heapq.heappush(top_k_heap, (similarity, chunk))
-            high_similarity_chunks += 1
-            
-            # Keep heap size <= top_k
-            if len(top_k_heap) > top_k:
-                heapq.heappop(top_k_heap)
-    
-    print(f"Found {high_similarity_chunks} chunks above {min_similarity} similarity")
-    
-    if not top_k_heap:
-        print(f"No chunks above {min_similarity} similarity threshold")
-        return []
-    
-    # Extract top_k chunks
-    top_chunks = [(similarity_score, chunk) for similarity_score, chunk in sorted(top_k_heap, reverse=True)]
-    return top_chunks
+            results.append((similarity, obj.properties["text"]))
+
+    return results
 
 class IngestRequest(BaseModel):
     categories: List[str]
