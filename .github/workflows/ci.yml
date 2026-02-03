@@ -49,10 +49,7 @@ jobs:
         run: |
           python -m venv venv
           source venv/bin/activate
-          pip install -r backend/gateway/requirements.txt
-          pip install -r backend/inference_service/requirements.txt
-          pip install -r backend/rag_service/requirements.txt
-          pip install -r backend/user_service/requirements.txt
+          pip install -r backend/requirements.txt
 
       - name: Run tests
         run: |
