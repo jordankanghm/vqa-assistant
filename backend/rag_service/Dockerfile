@@ -8,13 +8,16 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --default-timeout=300 --retries=10 -r requirements.txt
 
 # Copy the rest of the service code
-COPY . .
+COPY . ./rag_service
 
 # Expose port for this service
 EXPOSE 8002
 
+# Set PYTHONPATH to include current directory so rag_service is recognized
+ENV PYTHONPATH=/app
+
 # Default command to run the service
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002"]
+CMD ["uvicorn", "rag_service.main:app", "--host", "0.0.0.0", "--port", "8002"]

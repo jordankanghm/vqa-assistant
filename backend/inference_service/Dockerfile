@@ -8,7 +8,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --default-timeout=300 --retries=10 -r requirements.txt
 
 # Copy the rest of the service code
 COPY . .

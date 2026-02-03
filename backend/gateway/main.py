@@ -1,9 +1,8 @@
-# Run using uvicorn main:app --reload --port 8000
+# Run using: uvicorn gateway.main:app --reload --port 8000
 import base64
 import httpx
 import os
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -13,6 +12,9 @@ from typing import List, Union
 
 client = None
 security = HTTPBearer()
+
+INFERENCE_SERVICE_URL = os.getenv("INFERENCE_SERVICE_URL", "http://localhost:8001")
+USER_SERVICE_URL = os.getenv("USER_SERVICE_URL", "http://localhost:8003")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,16 +36,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
-
-INFERENCE_SERVICE_URL = os.getenv(
-    "INFERENCE_SERVICE_URL",
-    "http://localhost:8001"
-)
-
-USER_SERVICE_URL = os.getenv(
-    "USER_SERVICE_URL",
-    "http://localhost:8003"
 )
 
 # Inference models

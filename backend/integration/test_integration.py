@@ -1,9 +1,9 @@
-# Run in root directory using: pytest backend/integration/test_integration.py -v
-
+# Run using: python -m path_to_test_integration.py
 import os
 import pytest
 import requests
 import time
+from rag_service.ingestion.ingest_wikipedia import ingest_wikipedia_articles
 
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8000")
 INFERENCE_SERVICE_URL = os.environ.get("INFERENCE_SERVICE_URL", "http://localhost:8001")
@@ -418,12 +418,7 @@ class TestRAG:
         """Insert predictable test data via your endpoints."""
         
         # Ingest test Wikipedia data
-        ingest_payload = {
-            "categories": ["Machine learning"],
-            "limit_pages": 2
-        }
-        requests.post(f"{RAG_SERVICE_URL}/ingest-wikipedia", json=ingest_payload, timeout=60)
-        
+        ingest_wikipedia_articles(["Machine learning"])
         time.sleep(10)
         
         # Verify data ingested

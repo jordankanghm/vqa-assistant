@@ -1,6 +1,6 @@
-# Run in root directory using: python -m pytest backend/inference_service/tests/test_inference_service.py -v
+# Run using: python -m pytest path_to_test_inference_service.py -v
 import pytest
-from backend.inference_service.main import app, security
+from inference_service.main import app, security
 from fastapi.testclient import TestClient
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
@@ -13,7 +13,7 @@ def mock_lifespan(monkeypatch):
         yield 
         # Shutdown: nothing
     
-    monkeypatch.setattr('backend.inference_service.main.lifespan', noop_lifespan)
+    monkeypatch.setattr('inference_service.main.lifespan', noop_lifespan)
     
     return app
 
@@ -35,7 +35,7 @@ def mock_jwt_auth():
     app.dependency_overrides.pop(security, None)
 
 class TestUnauthInference:
-    @patch("backend.inference_service.main.rag", new_callable=AsyncMock)
+    @patch("inference_service.main.rag", new_callable=AsyncMock)
     def test_unauth_inference_valid(self, mock_rag, client):
         mock_response = AsyncMock()
         mock_response.content = "Valid conversation."
@@ -134,8 +134,8 @@ class TestUnauthInference:
         assert response.status_code == 422
 
 class TestAuthInference:
-    @patch("backend.inference_service.main.client", new_callable=AsyncMock)
-    @patch("backend.inference_service.main.rag", new_callable=AsyncMock)
+    @patch("inference_service.main.client", new_callable=AsyncMock)
+    @patch("inference_service.main.rag", new_callable=AsyncMock)
     def test_auth_inference_valid(self, mock_rag, mock_client, mock_jwt_auth, client):
         mock_rag_resp = AsyncMock()
         mock_rag_resp.content = "Valid conversation."
