@@ -1,6 +1,4 @@
 # Run in current directory using: uvicorn main:app --reload --port 8002
-import heapq
-import os
 import re
 import weaviate
 import wikipediaapi
@@ -9,9 +7,9 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 from typing import Annotated, List
 from weaviate.classes.config import Configure, DataType, Property, VectorDistances
+from weaviate.classes.query import Filter
 
 client, model, wiki_wiki = None, None, None
 
@@ -251,20 +249,16 @@ def vector_search(query, top_k=3, min_similarity=0.5):
     chunk_results = chunks_collection.query.near_vector(
         near_vector=query_vector,
         limit=top_k,
-        filters={
-            "path": ["summaryId"],
-            "operator": "Equal",
-            "valueText": summary_id
-        },
-        return_metadata=["distance"],
-        return_properties=["text"]
+        filters=Filter.by_property("summaryId").equal(summary_id),
+        return_properties=["text"],
+        return_metadata=["distance"]
     )
 
     results = []
 
     for obj in chunk_results.objects:
         similarity = 1.0 - obj.metadata.distance
-        
+
         if similarity >= min_similarity:
             results.append((similarity, obj.properties["text"]))
 
@@ -302,8 +296,8 @@ async def db_vector_search(req: SearchRequest):
     """Perform Weaviate vector search."""
     try:
         results = vector_search(req.query, req.top_k, req.min_similarity)
-        chunks = [{"similarity": sim, "text": chunk["text"]} for sim, chunk in results]
-
+        chunks = [{"similarity": sim, "text": text} for sim, text in results]
+        
         return SearchResponse(chunks=chunks, count=len(chunks))
     
     except Exception as e:
