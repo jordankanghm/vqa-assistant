@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir pytest requests
 RUN chmod +x wait-for.sh
 
 # Run the integration test by default
-CMD ["./wait-for.sh", \
+CMD ["sh", "./wait-for.sh", \
      "http://gateway:8000/docs", \
      "http://inference_service:8001/docs", \
      "http://rag_service:8002/docs", \
