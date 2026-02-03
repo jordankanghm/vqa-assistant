@@ -1,4 +1,4 @@
-# Run in current directory using: uvicorn main:app --reload --port 8003
+# Run using: uvicorn user_service.main:app --reload --port 8003
 import asyncpg
 import json
 import os
@@ -16,8 +16,8 @@ from typing import List, Optional, Union
 security = HTTPBearer()
 
 load_dotenv()  # Load .env file
-AUTH_DATABASE_URL = os.environ.get("AUTH_DATABASE_URL")
-AUTH_SECRET_KEY = os.environ.get("AUTH_SECRET_KEY")
+AUTH_DATABASE_URL = os.getenv("AUTH_DATABASE_URL")
+AUTH_SECRET_KEY = os.getenv("AUTH_SECRET_KEY")
 ALGORITHM = os.environ.get("AUTH_ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

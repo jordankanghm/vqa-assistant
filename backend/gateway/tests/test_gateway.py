@@ -1,6 +1,6 @@
-# Run in root directory using: python -m pytest backend/gateway/tests/test_gateway.py -v
+# Run using: python -m pytest path_to_test_gateway.py -v
 import pytest
-from backend.gateway.main import app, security
+from gateway.main import app, security
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,7 +11,7 @@ def mock_lifespan(monkeypatch):
         yield
         # Shutdown: nothing
     
-    monkeypatch.setattr('backend.gateway.main.lifespan', noop_lifespan)
+    monkeypatch.setattr('gateway.main.lifespan', noop_lifespan)
     
     return app
 
@@ -33,7 +33,7 @@ def mock_jwt_auth():
     app.dependency_overrides.pop(security, None)
 
 class TestUnauthInference:
-    @patch("backend.gateway.main.client", new_callable=AsyncMock)
+    @patch("gateway.main.client", new_callable=AsyncMock)
     def test_unauth_inference_with_valid_alternating(self, mock_client, client):
         # Configure mock_client
         mock_response = AsyncMock()
@@ -132,7 +132,7 @@ class TestUnauthInference:
         assert response.status_code == 422
 
 class TestAuthInference:
-    @patch("backend.gateway.main.client", new_callable=AsyncMock)
+    @patch("gateway.main.client", new_callable=AsyncMock)
     def test_auth_inference_valid(self, mock_client, mock_jwt_auth, client):
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -254,7 +254,7 @@ class TestChats:
 
         return mock_resp
 
-    @patch("backend.gateway.main.client", new_callable=AsyncMock)
+    @patch("gateway.main.client", new_callable=AsyncMock)
     def test_get_user_chats_success(self, mock_client, client, mock_chats_response, mock_jwt_auth):
         """Test successful chats retrieval."""
         mock_client.get.return_value = mock_chats_response
@@ -265,7 +265,7 @@ class TestChats:
         assert "chats" in response.json()
         assert isinstance(response.json()["chats"], list)
 
-    @patch("backend.gateway.main.client", new_callable=AsyncMock)
+    @patch("gateway.main.client", new_callable=AsyncMock)
     def test_get_user_chats_user_service_error(self, mock_client, client, mock_jwt_auth):
         mock_error_resp = AsyncMock()
         mock_error_resp.status_code = 500
@@ -297,7 +297,7 @@ class TestRegister:
         
         return mock_response
     
-    @patch("backend.gateway.main.client", new_callable=AsyncMock)
+    @patch("gateway.main.client", new_callable=AsyncMock)
     def test_register_success(self, mock_client, mock_register_response, client):
         mock_client.post.return_value = mock_register_response
         
@@ -336,7 +336,7 @@ class TestLogin:
 
         return mock_resp
 
-    @patch("backend.gateway.main.client", new_callable=AsyncMock)
+    @patch("gateway.main.client", new_callable=AsyncMock)
     def test_login_success(self, mock_client, mock_login_response, client):
         mock_client.post.return_value = mock_login_response
         

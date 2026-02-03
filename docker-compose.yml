@@ -11,7 +11,8 @@ services:
 
   backend_integration_tests:
     build:
-      context: ./backend/integration
+      context: ./backend
+      dockerfile: integration/Dockerfile
     depends_on:
       - gateway
       - user_service
@@ -22,6 +23,9 @@ services:
       INFERENCE_SERVICE_URL: http://inference_service:8001
       RAG_SERVICE_URL: http://rag_service:8002
       USER_SERVICE_URL: http://user_service:8003
+      WEAVIATE_HOST: weaviate
+      WEAVIATE_PORT: 8080
+      WEAVIATE_GRPC_PORT: 50051
 
   gateway:
     build:
@@ -55,6 +59,10 @@ services:
       - "8002:8002"
     depends_on:
       - weaviate
+    environment:
+      WEAVIATE_HOST: weaviate
+      WEAVIATE_PORT: 8080
+      WEAVIATE_GRPC_PORT: 50051
 
   user_service:
     build:

@@ -1,10 +1,8 @@
-# Run using uvicorn main:app --reload --port 8001
+# Run using: uvicorn inference_service.main:app --reload --port 8001
 import base64
 import httpx
-import json
 import os
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
 from fastapi import Depends, FastAPI
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -14,10 +12,6 @@ from typing import List, Union
 
 client, llm = None, None
 security = HTTPBearer()
-
-load_dotenv()
-SECRET_KEY = os.environ.get("AUTH_SECRET_KEY")
-ALGORITHM = os.environ.get("AUTH_ALGORITHM")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

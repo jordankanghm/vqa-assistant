@@ -1,7 +1,7 @@
-# Run in root directory using: python -m pytest backend/user_service/tests/test_user_service.py -v
+# Run using: python -m pytest path_to_test_user_service.py -v
 import asyncpg
 import pytest
-from backend.user_service.main import (
+from user_service.main import (
     app,
     create_access_token,
     get_user,
@@ -24,7 +24,7 @@ def mock_lifespan(monkeypatch):
         yield 
         # Shutdown: nothing
     
-    monkeypatch.setattr('backend.user_service.main.lifespan', noop_lifespan)
+    monkeypatch.setattr('user_service.main.lifespan', noop_lifespan)
 
     return app
 
@@ -35,8 +35,8 @@ def client(mock_lifespan):
 
 @pytest.fixture(autouse=True)
 def mock_all_secrets():
-    with patch('backend.user_service.main.AUTH_SECRET_KEY', TEST_SECRET_KEY), \
-         patch('backend.user_service.main.ALGORITHM', ALGORITHM):
+    with patch('user_service.main.AUTH_SECRET_KEY', TEST_SECRET_KEY), \
+         patch('user_service.main.ALGORITHM', ALGORITHM):
         yield
 
 @pytest.fixture
@@ -50,16 +50,16 @@ def mock_db_pool():
     
     mock_pool.acquire.return_value = cm
     
-    with patch('backend.user_service.main.pool', mock_pool):
+    with patch('user_service.main.pool', mock_pool):
         yield mock_conn
 
 class TestRegisterLogin:        
     @pytest.fixture
     def mock_db_functions(self):
-        with patch('backend.user_service.main.get_user', new_callable=AsyncMock) as mock_get_user, \
-            patch('backend.user_service.main.hash_password') as mock_hash, \
-            patch('backend.user_service.main.verify_password') as mock_verify, \
-            patch('backend.user_service.main.create_access_token') as mock_token:
+        with patch('user_service.main.get_user', new_callable=AsyncMock) as mock_get_user, \
+            patch('user_service.main.hash_password') as mock_hash, \
+            patch('user_service.main.verify_password') as mock_verify, \
+            patch('user_service.main.create_access_token') as mock_token:
             mock_hash.side_effect = lambda p: f"hashed_{p}"
             mock_verify.return_value = True
             mock_token.return_value = "mock_jwt_token"

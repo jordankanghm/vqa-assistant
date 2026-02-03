@@ -1,12 +1,14 @@
-# Run in root directory using: python -m pytest backend/rag_service/tests/test_db.py -v
+# Run using: python -m pytest path_to_test_rag_service.py -v
 import pytest
-from backend.rag_service.main import (
-    app,
+from rag_service.main import app
+from rag_service.ingestion.ingest_wikipedia import (
     chunk_text,
-    create_collections,
-    delete_collections,
     get_all_section_texts,
     preprocess_text
+)
+from rag_service.schema.collections import (
+    create_collections,
+    delete_collections
 )
 from fastapi.testclient import TestClient
 from unittest.mock import call, Mock, patch
@@ -18,7 +20,7 @@ def mock_lifespan(monkeypatch):
         yield
         # Shutdown: nothing
     
-    monkeypatch.setattr('backend.rag_service.main.lifespan', noop_lifespan)
+    monkeypatch.setattr('rag_service.main.lifespan', noop_lifespan)
 
     return app
 
@@ -98,7 +100,7 @@ class TestSectionExtraction:
         assert "References" not in "".join(result)
 
 class TestWeaviateCollections:
-    @patch('backend.rag_service.main.client')
+    @patch('rag_service.main.client')
     def test_create_collections(self, mock_weaviate_client):
         mock_collections = Mock()
         mock_weaviate_client.collections = mock_collections
@@ -107,11 +109,11 @@ class TestWeaviateCollections:
         mock_collections.exists = mock_exists
         mock_collections.create = mock_create
         
-        create_collections(["Summary", "Chunk"])
+        create_collections(["Summary", "Chunk"], mock_weaviate_client)
 
         assert mock_create.call_count == 2
 
-    @patch('backend.rag_service.main.client')
+    @patch('rag_service.main.client')
     def test_delete_collections(self, mock_weaviate_client):
         mock_collections = Mock()
         mock_weaviate_client.collections = mock_collections
@@ -120,7 +122,7 @@ class TestWeaviateCollections:
         mock_collections.delete = mock_delete
         
         collections_to_delete = ["Summary", "Chunk", "TestCollection"]
-        delete_collections(collections_to_delete)
+        delete_collections(collections_to_delete, mock_weaviate_client)
         
         # Verify each collection was deleted
         assert mock_delete.call_count == 3
@@ -137,7 +139,7 @@ class TestVectorSearchAPI:
         {"query": "test query", "top_k": 5},  # Uses defaults
         {"query": "deep learning models"},  # Minimal valid payload
     ])
-    @patch("backend.rag_service.main.vector_search")
+    @patch("rag_service.main.vector_search")
     def test_search_valid_payloads(self, mock_vector_search, valid_payload, client):
         # Mock vector_search to return realistic results
         mock_results = [
@@ -189,7 +191,7 @@ class TestVectorSearchAPI:
 
         assert response.status_code == 422
 
-    @patch("backend.rag_service.main.vector_search", side_effect=Exception("Vector search failed"))
+    @patch("rag_service.main.vector_search", side_effect=Exception("Vector search failed"))
     def test_search_handles_exceptions(self, mock_vector_search, client):
         """Test error handling when vector_search fails."""
         payload = {"query": "test", "top_k": 3}
